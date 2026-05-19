@@ -71,7 +71,7 @@ Two follow-up examples are planned (DeFi staking, ERC-4626 vault). They should n
 
 ## Assumptions
 
-- **Anchor** 0.30+ is the target framework. Raw Solana is noted only when CU-critical or when Anchor cannot express the pattern (rare).
+- **Anchor 1.0+** is the target framework. The reference examples compile against `anchor-lang = "1.0.2"` / `anchor-spl = "1.0.2"`. Note that 1.0 changed `CpiContext::new` / `new_with_signer` to take `Pubkey` (via `.key()`) instead of `AccountInfo` for the program argument. Raw Solana is noted only when CU-critical or when Anchor cannot express the pattern (rare).
 - **SPL Token classic** is the default for fungible tokens. Token-2022 is mentioned where its extensions change the answer.
 - **Solidity ^0.8.x** assumed for input contracts (built-in arithmetic checks). Earlier versions need extra care — see `security/arithmetic.md`.
 

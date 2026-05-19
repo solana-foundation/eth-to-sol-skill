@@ -85,7 +85,7 @@ pub mod vault4626_naive {
         // Pull assets in.
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.user_asset_ata.to_account_info(),
                     to: ctx.accounts.asset_reserve.to_account_info(),
@@ -118,7 +118,7 @@ pub mod vault4626_naive {
 
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.user_asset_ata.to_account_info(),
                     to: ctx.accounts.asset_reserve.to_account_info(),
@@ -160,7 +160,7 @@ pub mod vault4626_naive {
         let signer_seeds: &[&[u8]] = &[b"vault_authority", &[bump]];
         token::transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.asset_reserve.to_account_info(),
                     to: ctx.accounts.receiver_asset_ata.to_account_info(),
@@ -202,7 +202,7 @@ pub mod vault4626_naive {
         let signer_seeds: &[&[u8]] = &[b"vault_authority", &[bump]];
         token::transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.asset_reserve.to_account_info(),
                     to: ctx.accounts.receiver_asset_ata.to_account_info(),
@@ -252,7 +252,7 @@ pub mod vault4626_naive {
 
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.owner_asset_ata.to_account_info(),
                     to: ctx.accounts.asset_reserve.to_account_info(),

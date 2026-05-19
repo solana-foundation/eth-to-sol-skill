@@ -69,7 +69,7 @@ Every item must hold before emitting `03-optimized.rs`. If one fails, fix and re
 - [ ] Every `Account<'info, T>` either uses Anchor's typed checks or includes explicit owner + discriminator validation. No `AccountInfo` smuggled through without checks.
 - [ ] Every signer-required path uses `Signer<'info>` or a manual `is_signer` check. No "the front end won't call it without a signer" reasoning.
 - [ ] Every PDA derivation either uses `seeds = [...], bump = stored_bump` (preferred — saves ~1.5k CU per call) or bare `seeds = [...], bump,` (acceptable when CU is not pressured; both forms enforce canonicalization via Anchor's `find_program_address` check). The cached form is strongly preferred — all reference examples use it. Do **not** use `bump = <user_input>` — that's the actual canonicalization vulnerability.
-- [ ] CPIs use `CpiContext::new` or `CpiContext::new_with_signer`. No hand-rolled `invoke`/`invoke_signed` with manually assembled `AccountInfo` arrays unless raw Solana is justified.
+- [ ] CPIs use `CpiContext::new` or `CpiContext::new_with_signer`. The program arg is a `Pubkey` (use `ctx.accounts.<program>.key()`) — Anchor 1.0+ removed the `AccountInfo` form. No hand-rolled `invoke`/`invoke_signed` with manually assembled `AccountInfo` arrays unless raw Solana is justified.
 - [ ] No path mutates state after a CPI to an untrusted program without re-reading and re-validating. (See `security/reentrancy.md` for why account locking is necessary but not sufficient.)
 - [ ] Account sizing is explicit: `space = 8 + <sum>`; the 8 is the Anchor discriminator. Variable-size fields have hard caps.
 - [ ] Errors use `#[error_code]`. No `ProgramError::Custom(n)` literals, no `msg!`-then-fail.

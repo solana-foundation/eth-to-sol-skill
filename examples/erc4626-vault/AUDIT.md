@@ -8,7 +8,7 @@ I am the auditor. One section per check. Findings tagged **PASS / WEAK / FAIL**.
 
 **Tag: PASS**
 
-Built both programs with Anchor 0.32.1 against the existing workspace (`/tmp/eth-to-sol-test`).
+Built both programs with Anchor 1.0.2 against the existing workspace (`/tmp/eth-to-sol-test`).
 
 Build commands and tails (build logs saved to `/tmp/vault-{naive,native}-build.log`):
 

@@ -78,7 +78,7 @@ pub mod escrow_naive {
         // a more careful design would create one per offer (see optimized).
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.maker_token_account_offered.to_account_info(),
                     to: ctx.accounts.vault_token_account_offered.to_account_info(),
@@ -129,7 +129,7 @@ pub mod escrow_naive {
         // Pull the wanted token from taker → maker.
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.taker_token_account_wanted.to_account_info(),
                     to: ctx.accounts.maker_token_account_wanted.to_account_info(),
@@ -144,7 +144,7 @@ pub mod escrow_naive {
         let signer_seeds: &[&[u8]] = &[b"vault_authority", &[bump]];
         token::transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.vault_token_account_offered.to_account_info(),
                     to: ctx.accounts.taker_token_account_offered.to_account_info(),
@@ -185,7 +185,7 @@ pub mod escrow_naive {
         let signer_seeds: &[&[u8]] = &[b"vault_authority", &[bump]];
         token::transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.vault_token_account_offered.to_account_info(),
                     to: ctx.accounts.maker_token_account_offered.to_account_info(),

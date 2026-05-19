@@ -254,7 +254,7 @@ Optimized (`03-optimized.rs:46`–`77`):
 ```rust
 token::mint_to(
     CpiContext::new_with_signer(
-        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.token_program.key(),
         MintTo {
             mint: ctx.accounts.mint.to_account_info(),
             to: ctx.accounts.recipient.to_account_info(),
@@ -279,7 +279,7 @@ Optimized (`03-optimized.rs:86`–`99`):
 ```rust
 token::burn(
     CpiContext::new(
-        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.token_program.key(),
         Burn {
             mint: ctx.accounts.mint.to_account_info(),
             from: ctx.accounts.holder_ata.to_account_info(),

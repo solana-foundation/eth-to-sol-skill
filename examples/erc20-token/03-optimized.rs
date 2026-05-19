@@ -68,7 +68,7 @@ pub mod erc20_native {
 
         token::mint_to(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 MintTo {
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.recipient.to_account_info(),
@@ -86,7 +86,7 @@ pub mod erc20_native {
     pub fn burn(ctx: Context<BurnInstruction>, amount: u64) -> Result<()> {
         token::burn(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Burn {
                     mint: ctx.accounts.mint.to_account_info(),
                     from: ctx.accounts.holder_ata.to_account_info(),

@@ -57,7 +57,7 @@ pub mod escrow_native {
 
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.maker_token_account_offered.to_account_info(),
                     to: ctx.accounts.vault.to_account_info(),
@@ -91,7 +91,7 @@ pub mod escrow_native {
         // Wanted token: taker → maker, atomic with the offered-release below.
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.taker_token_account_wanted.to_account_info(),
                     to: ctx.accounts.maker_token_account_wanted.to_account_info(),
@@ -109,7 +109,7 @@ pub mod escrow_native {
         ];
         token::transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.vault.to_account_info(),
                     to: ctx.accounts.taker_token_account_offered.to_account_info(),
@@ -122,7 +122,7 @@ pub mod escrow_native {
 
         // Close the vault token account; lamports go to the maker.
         token::close_account(CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.token_program.key(),
             CloseAccount {
                 account: ctx.accounts.vault.to_account_info(),
                 destination: ctx.accounts.maker.to_account_info(),
@@ -154,7 +154,7 @@ pub mod escrow_native {
 
         token::transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.vault.to_account_info(),
                     to: ctx.accounts.maker_token_account_offered.to_account_info(),
@@ -166,7 +166,7 @@ pub mod escrow_native {
         )?;
 
         token::close_account(CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.token_program.key(),
             CloseAccount {
                 account: ctx.accounts.vault.to_account_info(),
                 destination: ctx.accounts.maker.to_account_info(),

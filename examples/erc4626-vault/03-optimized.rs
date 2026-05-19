@@ -97,7 +97,7 @@ pub mod vault4626_native {
         // Pull asset tokens from depositor.
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.user_asset_ata.to_account_info(),
                     to: ctx.accounts.asset_reserve.to_account_info(),
@@ -137,7 +137,7 @@ pub mod vault4626_native {
 
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.user_asset_ata.to_account_info(),
                     to: ctx.accounts.asset_reserve.to_account_info(),
@@ -183,7 +183,7 @@ pub mod vault4626_native {
         // Burn shares from owner's ATA — SPL Token verifies signer is owner or delegate.
         token::burn(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Burn {
                     mint: ctx.accounts.share_mint.to_account_info(),
                     from: ctx.accounts.owner_share_ata.to_account_info(),
@@ -228,7 +228,7 @@ pub mod vault4626_native {
 
         token::burn(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Burn {
                     mint: ctx.accounts.share_mint.to_account_info(),
                     from: ctx.accounts.owner_share_ata.to_account_info(),
@@ -305,7 +305,7 @@ pub mod vault4626_native {
         // Transfer yield from the caller (authority) into the reserve.
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 Transfer {
                     from: ctx.accounts.authority_asset_ata.to_account_info(),
                     to: ctx.accounts.asset_reserve.to_account_info(),
@@ -431,7 +431,7 @@ fn mint_shares<'info>(
     let signer_seeds: &[&[u8]] = &[b"vault_authority", vault_key.as_ref(), &[bump]];
     token::mint_to(
         CpiContext::new_with_signer(
-            token_program.to_account_info(),
+            token_program.key(),
             MintTo {
                 mint: share_mint.to_account_info(),
                 to: receiver_share_ata.to_account_info(),
@@ -456,7 +456,7 @@ fn transfer_asset_out<'info>(
     let signer_seeds: &[&[u8]] = &[b"vault_authority", vault_key.as_ref(), &[bump]];
     token::transfer(
         CpiContext::new_with_signer(
-            token_program.to_account_info(),
+            token_program.key(),
             Transfer {
                 from: asset_reserve.to_account_info(),
                 to: receiver_asset_ata.to_account_info(),

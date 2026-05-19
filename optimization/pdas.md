@@ -139,7 +139,7 @@ let signer_seeds = &[seeds];
 
 token::mint_to(
     CpiContext::new_with_signer(
-        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.token_program.key(),
         MintTo {
             mint: ctx.accounts.mint.to_account_info(),
             to: ctx.accounts.recipient.to_account_info(),
