@@ -81,6 +81,25 @@ Every item must hold before emitting `03-optimized.rs`. If one fails, fix and re
 - [ ] If the contract emits events that SPL programs already emit (Transfer for SPL Token), prefer not duplicating them.
 - [ ] Re-init protection: PDAs that should only init once use `init` (not `init_if_needed`) and have unique seeds.
 
+## Tooling — Solana Developer MCP `rust_autofixer`
+
+If your environment exposes the Solana Developer MCP (`https://mcp.solana.com/mcp`), the `rust_autofixer` tool is part of the workflow — not optional.
+
+**When to call it:** every time you have produced or modified Anchor or Pinocchio Rust that you intend to ship. That includes `02-naive-port.rs` and `03-optimized.rs`, and any in-flight fix you apply after a failed `cargo check`.
+
+**How to call it:** pass the full Rust source. Specify the framework (`auto`, `anchor`, or `pinocchio`) if the caller hasn't already.
+
+**The loop:**
+
+1. Call `rust_autofixer` on the current Rust.
+2. Apply every suggested fix (they are mechanical, structured, and safe).
+3. Call `rust_autofixer` again.
+4. Repeat until `require_another_tool_call_after_fixing` is `false`.
+
+Only emit the artifact once the loop terminates. This is in addition to — not a replacement for — the pre-flight checklist above; the autofixer catches the structural-safety class of bug, the checklist catches design/idiom issues.
+
+**Do not use any other Solana MCP tool** (`list_sections`, `read_section`, `search`, etc.) for this workflow. Stay scoped to `rust_autofixer`.
+
 ## Explanation log schema
 
 Each entry is exactly four fields. Keep them tight — one to four sentences each.
