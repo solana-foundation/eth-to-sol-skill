@@ -32,11 +32,15 @@ When the optimized version meaningfully changes client-side integration (typical
 
 `05-explanation.md` is the teaching surface. Treat it as a first-class deliverable, not a comment block.
 
+## Read first
+
+Before producing any translation, internalize the EVM → SVM mental shift in `translation/mental-model.md`. The one-line summary: *on Ethereum the contract knows where its state lives; on Solana the caller brings it.* Every translation rule below is a consequence — if a step ever feels wrong, return to that file.
+
 ## Decision tree — which sub-files to load
 
-Default-load: `translation/type-mapping.md`, `translation/pattern-mapping.md`, `security/arithmetic.md`, `security/account-validation.md`, `security/pda-canonicalization.md`.
+Default-load: `translation/mental-model.md`, `translation/type-mapping.md`, `translation/pattern-mapping.md`, `security/arithmetic.md`, `security/account-validation.md`, `security/pda-canonicalization.md`.
 
-The default loads are non-negotiable. Arithmetic, account validation, and PDA canonicalization are the three security classes that bite *every* ported contract; they apply even to trivial inputs.
+The default loads are non-negotiable. The mental-model file frames every other decision; arithmetic, account validation, and PDA canonicalization are the three security classes that bite *every* ported contract.
 
 | Source contains | Also load |
 |---|---|
