@@ -2,13 +2,24 @@
 
 One entry per change in `04-diff.md`, grouped by theme. Each entry follows the schema: **What / Why / Benefit / Tradeoff**.
 
-This example teaches the cleanest possible version of three Solana ideas using a recognizable real-world primitive (a one-shot ERC-20 crowdfund):
+This example takes a familiar Solidity primitive — a one-shot ERC-20 crowdfund — and teaches three Solana ideas that a Solidity developer has to internalize before writing their first real Solana program:
 
-1. **Per-supporter PDAs replace `mapping(address => uint256)`.** The Solidity ledger is one storage slot per supporter inside a single contract. The Solana equivalent is one PDA per supporter — not a `Vec` inside a state account.
-2. **`init_if_needed` is the "create-or-find" branch for free.** The handler doesn't need an `iter().find()` over a `Vec` — the account constraint does the work.
-3. **`close = supporter` on refund replaces "mark refunded" sentinels.** Solidity zeroes the row; Solana tears down the account. The replay guard becomes structural, not arithmetic.
+1. **Per-supporter PDAs replace `mapping(address => uint256)`.** In Solidity the supporter ledger is `mapping(address => uint256) contributions`; in Solana there is no `mapping`, so the same logical ledger becomes one *account* per supporter at a deterministic address. Welcome to PDAs.
+2. **Anchor account constraints replace handler-body checks.** The "is this supporter new?", "is the signer the creator?", and "does this account belong to this fundraiser?" checks all move out of the function body and into declarations on the account struct. The handler shrinks to two lines.
+3. **Closing accounts replaces zeroing rows.** A Solidity contract marks a row "spent" by setting it to zero; on Solana, you delete the account entirely and the deposit it held (the rent) goes back to the supporter. The replay guard becomes structural rather than arithmetic.
 
-The reference Solana shape is `tokens/token-fundraiser` in solana-developers/program-examples — same instruction set (`initialize`, `contribute`, `claim`, `refund`), same per-supporter account model.
+The reference Solana shape is `tokens/token-fundraiser` in solana-developers/program-examples — same four-instruction lifecycle (`initialize`, `contribute`, `claim`, `refund`), same per-supporter account model.
+
+A vocabulary note before we start. The terms that come up below, with their EVM analogs:
+
+- **PDA** (Program-Derived Address) — Solana's deterministic account address. You derive it from a list of byte "seeds" the program controls — think of it as `keccak256(seeds)` with extra steps to keep the result off the secp256k1 curve. The crucial difference vs Solidity: each PDA is its own *account* on-chain, not a storage slot inside the program. There is no `state.somemap[key]` lookup; there is `Pubkey::find_program_address(seeds, programId)`.
+- **rent** — A refundable SOL deposit every account pays to live on-chain (roughly 0.001 SOL per KB). When the account is closed, the rent goes back to whoever you say.
+- **SPL Token** — The single shared on-chain token program. Every fungible token on Solana is just configuration on this one program, not its own contract.
+- **CPI** (cross-program invocation) — One program calling another, the way one Solidity contract `call`s another. The catch: every account the callee will touch must already be in the *caller's* transaction.
+- **Anchor** — The framework that wraps the lower-level Solana program API. Provides macros, account validation, and the IDL. Roughly the Hardhat-to-EVM relationship.
+- **Signer<'info>** — The Anchor type that declares an account as a transaction signer; the explicit form of `msg.sender`. Solana requires every signer to be named up front in the instruction's account list.
+
+After first use, each term is fair game; subsequent entries just use them.
 
 ---
 
@@ -16,24 +27,24 @@ The reference Solana shape is `tokens/token-fundraiser` in solana-developers/pro
 
 ### Global ledger `Vec<Contribution>` → per-supporter `Contributor` PDA (diff §S1)
 
-- **What:** Removed the `contributors: Vec<Contribution>` field from `Fundraiser` (`02-naive-port.rs:230`). Each supporter is now a standalone PDA derived from `[b"contributor", fundraiser.key().as_ref(), supporter.key().as_ref()]` (`03-optimized.rs:248`).
-- **Why:** Solidity's `mapping(address => uint256)` is one slot per supporter inside one contract — addressable by key inside one storage tree. The Solana equivalent is one account per supporter, addressable by PDA derivation. A `Vec` inside a state account is the wrong primitive: it bounds the supporter count, forces every contribute/refund to mutate the singleton state account, and scans linearly on lookup.
-- **Benefit:** Unbounded supporters (the naive `MAX_CONTRIBUTORS = 50` cap is gone). No serialization of cross-supporter activity. Every contribute/refund touches only that supporter's PDA plus the aggregate `total_raised` field.
-- **Tradeoff:** One extra account created per supporter — rent ~0.00089 SOL per row. Refunded to the supporter on `refund()` via `close = supporter`. If the goal is met and the creator claims, the contributor PDAs stay live forever (they're not closed by `claim` because the supporter is the rent payer). That's an O(N) rent footprint paid by participants; consider a sweep instruction if needed.
+- **What:** Removed the `contributors: Vec<Contribution>` field from the `Fundraiser` state account (`02-naive-port.rs:230`). Every supporter is now a standalone account — a PDA derived from `[b"contributor", fundraiser.key().as_ref(), supporter.key().as_ref()]` (`03-optimized.rs:248`). One account per supporter, addressable deterministically from the fundraiser + supporter pair.
+- **Why:** In Solidity, `mapping(address => uint256) contributions` puts every supporter at a deterministic storage slot *inside the contract* — `contributions[alice]` lands at `keccak256(alice, slot)`. The Solana equivalent is one *account* per supporter — a PDA (Program-Derived Address; same "deterministic address from key" idea, but each entry is its own on-chain account at the derived address, not a slot inside the program). The naive port tried to imitate the Solidity layout by stuffing a `Vec<Contribution>` into one shared state account. That works mechanically but loses the per-account property Solana needs: the runtime locks every writable account a transaction touches, so two supporters contributing at the same time would serialize on the shared state account. With one PDA per supporter, the two writes run in parallel.
+- **Benefit:** Unbounded supporters — the naive `MAX_CONTRIBUTORS = 50` cap is gone. Two unrelated contributions are now genuinely concurrent (Solana's parallel-execution scheduler can run them on different cores). Every contribute/refund touches only that supporter's PDA plus the aggregate `total_raised` field, instead of mutating a singleton state account.
+- **Tradeoff:** One extra account per supporter. Each PDA holds 16 bytes of data and costs ~0.00089 SOL of rent (a refundable SOL deposit the supporter pays at first contribution to keep the account alive). The supporter recovers it on `refund` via `close = supporter` (see §S3). If the goal is met and the creator claims, the contributor PDAs stay live forever — they're not closed by `claim` because the supporter is the rent payer and only they can recover it. That's an O(N) rent footprint paid by participants; a "sweep" cleanup instruction can be added if it matters in practice.
 
 ### Linear `Vec` lookup → PDA derivation (diff §S2)
 
-- **What:** Replaced the `f.contributors.iter_mut().find(|c| c.who == supporter_key)` branch (`02-naive-port.rs:62`) with `&mut ctx.accounts.contributor` (`03-optimized.rs:62`). The "is this supporter new?" branch moves into the `init_if_needed` constraint on the account.
-- **Why:** The naive form has the program do work the runtime can do for free. Anchor validates account existence + seeds before the handler runs, so the only remaining work in the handler is "add to the amount".
-- **Benefit:** Handler body is two lines. No `TooManyContributors` error path. Constant compute per call regardless of how many other supporters have contributed.
-- **Tradeoff:** Requires the `init-if-needed` feature flag in `Cargo.toml` (already enabled in the workspace). The supporter pays rent on their first contribution.
+- **What:** Replaced the naive's `f.contributors.iter_mut().find(|c| c.who == supporter_key)` lookup (`02-naive-port.rs:62`) — which scans the contributor list linearly looking for the supporter's row — with `&mut ctx.accounts.contributor` (`03-optimized.rs:62`), a direct reference to the supporter's account. The "is this supporter new or returning?" branch moves out of the handler body and into an `init_if_needed` constraint on the account itself.
+- **Why:** The naive form has the program do work the Solana runtime can do for free. Anchor (the framework on top of raw Solana, similar to Hardhat-vs-raw-EVM) validates account existence and PDA seeds *before* the handler body runs — so by the time the handler executes, the right account is either already loaded (returning supporter) or freshly initialized (new supporter). Either way the handler just adds to it.
+- **Benefit:** Handler body is two lines instead of fifteen. No `TooManyContributors` error path. Constant compute per contribution regardless of how many supporters have contributed — the EVM mental model says "scanning is fine because mappings are O(1)", and here the equivalent is "PDA derivation is O(1) and the runtime does it before our code starts".
+- **Tradeoff:** Requires the `init-if-needed` feature flag in `Cargo.toml` (already enabled in the workspace). The supporter pays the PDA's rent on their first contribution — a one-time cost they recover when they refund or if a sweep instruction is added.
 
 ### Refund replay protection: zero-amount sentinel → account close (diff §S3)
 
-- **What:** Replaced the naive's `f.contributors[idx].amount = 0` (`02-naive-port.rs:131`) with `close = supporter` on the contributor PDA's `#[account(...)]` constraint (`03-optimized.rs:231`).
-- **Why:** "Mark this row as refunded by zeroing the amount" is a Solidity idiom — it works because mappings are infinite and you can't delete entries cheaply. On Solana you can: close the account. A second `refund()` for the same supporter then fails at account validation (PDA doesn't exist), which is a structural guard, not a runtime check that depends on the row not being mutated.
-- **Benefit:** Replay protection becomes structural. The supporter recovers their rent. Storage footprint of refunded supporters drops to zero.
-- **Tradeoff:** None for the supporter (they refund, they get their rent back). For the creator's mental model: a successfully-funded campaign keeps its contributor PDAs around forever unless a separate cleanup instruction is added.
+- **What:** Replaced the naive's `f.contributors[idx].amount = 0` (`02-naive-port.rs:131`) — the "mark this row as refunded by zeroing the amount" pattern — with `close = supporter` on the contributor PDA's `#[account(...)]` constraint (`03-optimized.rs:231`). `close = supporter` is an Anchor constraint that, when the instruction succeeds, zeros the account's data, marks it deallocated, and transfers all of its rent back to `supporter`. There is no Solidity equivalent because Solidity storage slots can't be deleted.
+- **Why:** "Zero the row" is a Solidity idiom — it works because mappings are infinite and you can't actually delete an entry; the best you can do is set it to its zero value and rely on a runtime check (`if amount > 0`) to reject re-spends. On Solana you *can* delete the account, so the cheaper move is to delete it: a second `refund()` for the same supporter then fails at *account validation* (the PDA doesn't exist anymore) instead of inside the handler at a runtime check. The replay guard becomes structural — built into the account graph rather than a value-check that depends on the row not being mutated by some other code path.
+- **Benefit:** Replay protection becomes structural — there is literally no account for a duplicate refund to operate on, so the program can't even reach the handler body. The supporter recovers their rent (the ~0.00089 SOL they deposited on first contribution). Storage footprint of refunded supporters drops to zero rather than lingering as "row with `amount = 0`" forever.
+- **Tradeoff:** None for the supporter (they refund, they get their rent back). For the creator's mental model: a successfully-funded campaign's contributor PDAs stay around forever unless a separate cleanup instruction sweeps them — same rent footprint as before §S1 noted, but the user-visible behavior is "my contribution PDA still exists in my wallet view after the campaign succeeded".
 
 ---
 
@@ -41,27 +52,31 @@ The reference Solana shape is `tokens/token-fundraiser` in solana-developers/pro
 
 ### `claim()` authorization via `has_one` + seed-derived signer (diff §A1)
 
-- **What:** Removed the runtime `require!(f.creator == ctx.accounts.creator.key(), ...)` check (`02-naive-port.rs:84`). Authorization is now enforced by Anchor account validation via `seeds = [FUNDRAISER_SEED, creator.key().as_ref()]` + `has_one = creator` on the `Fundraiser` account (`03-optimized.rs:196`).
-- **Why:** The fundraiser PDA's seeds include `creator.key()`, so only the actual creator can re-derive its address. `has_one = creator` re-checks that the loaded account's `creator` field matches the signer. Both checks happen before the handler body, so a wrong signer can't reach any state-mutating code.
-- **Benefit:** Authorization is checked at the runtime boundary, not inside the handler. Reviewers see the access-control rule at the top of the struct, not buried in instruction logic. One fewer way to forget the check on a new instruction.
-- **Tradeoff:** Anchor-specific idiom. Reviewers coming from raw Solana need to know what `has_one` does.
+- **What:** Removed the runtime `require!(f.creator == ctx.accounts.creator.key(), ...)` check from the handler body (`02-naive-port.rs:84`). Authorization is now enforced by Anchor account validation: the `Fundraiser` PDA's seeds include `creator.key()`, and a `has_one = creator` constraint on the account declares that its stored `creator` field must equal the `creator` signer passed in (`03-optimized.rs:196`).
+- **Why:** Two layers of protection that both happen *before* the handler runs:
+  1. **Seed binding.** The `Fundraiser` PDA's address is derived from `[b"fundraiser", creator.key().as_ref()]`, so a wrong signer would derive a *different* address and Anchor would fail to load the account at all.
+  2. **`has_one = creator`.** Anchor compares the loaded `Fundraiser.creator` field against the `creator` account passed in this instruction; mismatch → load fails before the handler body executes.
+
+  The Solidity equivalent of `require(msg.sender == owner)` is a runtime check inside the function. Anchor's account validation makes the same check declarative — it lives on the account struct, runs before any state mutation, and surfaces in the program's IDL (so off-chain tooling can warn about misuse).
+- **Benefit:** Authorization is checked at the runtime boundary, not buried in instruction logic. Reviewers see the access-control rule at the top of the account struct, the same way a Solidity reviewer would look for `onlyOwner` modifiers — except here it's enforced before *any* state mutation is even reachable. One fewer way to forget the check on a new instruction.
+- **Tradeoff:** Anchor-specific idiom. A reviewer used to raw Solana (no framework) has to know what `has_one` and seed-binding do. Documented in `security/signer-checks.md`.
 
 ### Invariant-first state update in `refund` (diff §A2)
 
-- **What:** Decrement `total_raised` before the token-transfer CPI (`03-optimized.rs:106`), not after (`02-naive-port.rs:133`).
-- **Why:** Anchor programs don't have Solidity-style re-entrancy (the runtime serializes cross-program calls), so the bug class isn't reachable today. But "update invariants before external calls" is a free habit that keeps the on-chain state consistent even when a CPI fails mid-transaction — and means the program reads the same way as Solidity code reviewed under the *checks-effects-interactions* rule.
-- **Benefit:** Aligns with the security idiom every auditor knows. Cheap insurance.
-- **Tradeoff:** Slight readability cost — the `total_raised` write isn't visually adjacent to the `contributor` close in the handler body.
+- **What:** Decrement `total_raised` (the running sum on the `Fundraiser`) *before* the token-transfer CPI that pays the supporter back, not after (`03-optimized.rs:106` vs `02-naive-port.rs:133`).
+- **Why:** This is the *checks-effects-interactions* pattern from Solidity reentrancy auditing, applied for slightly different reasons. Anchor programs can't be reentered the way a Solidity contract can — Solana's runtime locks every writable account for the duration of a transaction, so a CPI'd-into program can't call back into ours while we're still executing. Reentrancy isn't a bug class on Solana. But "update invariants before external calls" is still a free habit: if the CPI fails partway through (network error, sandbox crash, downstream program rejects), the on-chain state stays consistent with what the program *thinks* happened. And it makes the program read the same way as Solidity code under the same audit rule.
+- **Benefit:** Aligns with the security idiom every Solidity auditor reads for. Cheap insurance against weird CPI failure modes.
+- **Tradeoff:** Slight readability cost — the `total_raised` write isn't visually adjacent to the `contributor` account close in the handler body, which can make the flow a half-step harder to trace.
 
 ---
 
 ## CPI & program reuse
 
-### CPI authority signer seeds consolidated (diff §C1)
+### PDA seed strings consolidated (diff §C1)
 
-- **What:** Moved the seed byte-strings (`b"fundraiser"`, `b"vault"`, `b"contributor"`) into module-level constants (`03-optimized.rs:14`–`16`) so every PDA derivation references the same source.
-- **Why:** Most PDA bugs are typos in seed strings — a wrong byte in one of two places where the same seed is referenced. Consolidating to one constant removes the divergence risk.
-- **Benefit:** Hard to silently divergence. Reviewers scan one place to audit the program's PDA namespace.
+- **What:** Moved the seed byte-strings (`b"fundraiser"`, `b"vault"`, `b"contributor"`) into module-level constants (`03-optimized.rs:14`–`16`) so every PDA derivation references the same source — both the `#[derive(Accounts)]` constraints and the `signer_seeds` arrays used to sign CPIs on behalf of the PDA.
+- **Why:** A PDA's address is determined entirely by its seeds. A one-byte typo in one of two places where the same seed is referenced derives a *different* address — and the bug is silent: the program just signs CPIs for a PDA it doesn't actually control, or loads an account that doesn't match what it intended. Most PDA-related production bugs are this exact shape. Consolidating to one constant removes the divergence risk.
+- **Benefit:** Hard to silently diverge. Reviewers audit the program's PDA namespace in one place. The Solidity-equivalent practice is "use named constants for storage-slot indexes"; same hygiene, higher stakes here because Solana can't recover from a wrong-address sign.
 - **Tradeoff:** None.
 
 ---
@@ -70,17 +85,17 @@ The reference Solana shape is `tokens/token-fundraiser` in solana-developers/pro
 
 ### `MAX_CONTRIBUTORS` cap deleted (diff §R1)
 
-- **What:** Removed the `const MAX_CONTRIBUTORS: usize = 50` cap (`02-naive-port.rs:17`).
-- **Why:** Required only because the `Vec<Contribution>` had to fit inside one account. With per-supporter PDAs, the cap has no purpose.
-- **Benefit:** Unbounded scale. No `TooManyContributors` error to handle in the client.
+- **What:** Removed the `const MAX_CONTRIBUTORS: usize = 50` cap (`02-naive-port.rs:17`) and the `TooManyContributors` error it raised.
+- **Why:** The cap existed only because the `Vec<Contribution>` had to fit inside one account's data — Anchor needs a known max size at init time to allocate space (and pay the right rent). With per-supporter PDAs (§S1), each supporter brings their own account, so there's nothing to cap.
+- **Benefit:** Unbounded scale. No `TooManyContributors` error path for the client to handle.
 - **Tradeoff:** None.
 
 ### `Fundraiser` account shrinks 23× (diff §R2)
 
-- **What:** `Fundraiser::INIT_SPACE` drops from ~2094 bytes (with 50-entry Vec) to 90 bytes (`03-optimized.rs:236`–`245`).
-- **Why:** Per-supporter state moved out. The fixed-size account is the cheap, hot-path-friendly singleton; per-supporter rent is paid by supporters on first contribution.
-- **Benefit:** Smaller hot account means smaller compute on every contribute/claim/refund. Creator's initial rent burden drops from ~0.014 SOL to ~0.0009 SOL.
-- **Tradeoff:** Aggregate rent across many supporters is higher, but it's distributed (each pays their own) and recovered on refund.
+- **What:** `Fundraiser::INIT_SPACE` (the account's allocated size, which determines its rent cost) drops from ~2094 bytes with a 50-entry `Vec` to 90 bytes (`03-optimized.rs:236`–`245`).
+- **Why:** Per-supporter state moved out (§S1), so the singleton state account only has to hold the fundraiser config and aggregates. Per-supporter rent is paid by supporters on first contribution, not by the creator at init.
+- **Benefit:** Smaller hot account → smaller compute on every contribute/claim/refund (Anchor deserializes the whole account on entry; less data = fewer compute units burned). Creator's initial rent burden drops from ~0.014 SOL to ~0.0009 SOL — meaningful for a Solidity dev used to "deploying a contract is the cost, then state writes are gas" and surprised that Solana charges per-byte-of-state.
+- **Tradeoff:** Aggregate rent across many supporters is higher than the naive's "one account holds everything", but it's distributed (each supporter pays their own) and recovered on refund.
 
 ---
 
@@ -88,7 +103,7 @@ The reference Solana shape is `tokens/token-fundraiser` in solana-developers/pro
 
 ### `init_if_needed` for the contributor PDA (diff §I1)
 
-- **What:** Use `init_if_needed` instead of two instructions (`register_contributor` + `contribute`) or a manual existence check (`03-optimized.rs:182`).
-- **Why:** Solidity's `mapping(address => uint256) += amount` has no "create" step — the slot is implicitly present. The Solana analogue is `init_if_needed`, which creates the account on first call and is a no-op on subsequent calls.
+- **What:** The `contributor` account in the `Contribute` instruction uses `init_if_needed` (`03-optimized.rs:182`), which tells Anchor "create this account on the first call, no-op on subsequent calls". The supporter pays rent on the first contribution; later contributions just load and mutate.
+- **Why:** Solidity's `mapping(address => uint256) contributions += amount` has no "create" step — the slot is conceptually always there (mappings are infinite by default). The closest Solana analog is `init_if_needed`: it creates the underlying account the first time, and after that it's just there. Without `init_if_needed` you'd need two instructions: a `register_contributor` to create the account, then `contribute` to top it up — bad UX for an EVM developer used to one-shot writes.
 - **Benefit:** One instruction does the work of two. The client never has to know whether it's the supporter's first contribution.
-- **Tradeoff:** `init_if_needed` requires explicit opt-in via the `init-if-needed` Anchor feature; teams sometimes ban it because it's easier to forget account-collision checks. Here it's safe because the PDA seeds bind the account to a specific `(fundraiser, supporter)` pair — no second caller can hijack the slot.
+- **Tradeoff:** `init_if_needed` requires explicit opt-in via the `init-if-needed` Anchor feature flag, and some teams ban it because it's easier to forget account-collision checks. Here it's safe because the PDA seeds bind the account to a specific `(fundraiser, supporter)` pair — no other caller can hijack the slot since only the matching supporter signer can derive the same address.
