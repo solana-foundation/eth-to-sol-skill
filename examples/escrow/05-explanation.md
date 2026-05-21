@@ -59,7 +59,10 @@ The source contract is a textbook atomic ERC-20 swap. The Solana version mirrors
 
 ### PDA bumps cached + canonicalization enforced (diff §Sec1)
 
-- **What / Why / Benefit / Tradeoff:** See `examples/erc20-token/05-explanation.md` § "Cache and enforce canonical PDA bumps." Same pattern applied to `Offer.bump` and `Offer.vault_authority_bump`.
+- **What:** Both `Offer.bump` and `Offer.vault_authority_bump` are stored on the account at init time and used via `bump = offer.bump` in account validation rather than being re-derived per call.
+- **Why:** `Pubkey::find_program_address` is hot — re-deriving the bump on every instruction costs ~1500 CU. More importantly, accepting any valid bump (vs. the canonical one) opens a class of bugs where an attacker passes a non-canonical bump and the program signs for a different address than the one it thinks. Storing the canonical bump pins the PDA identity at init.
+- **Benefit:** Saves CU per instruction; eliminates the non-canonical-bump bug class. See `security/pda-canonicalization.md` for the full pattern.
+- **Tradeoff:** One `u8` of account space per stored bump. Negligible.
 
 ### Per-offer vault authority (diff §Sec2)
 

@@ -338,8 +338,8 @@ Both flagged in SKILL_GAPS.md for this example (see §J).
 
 | Example | Governance PDA name |
 |---|---|
-| erc20-token | `Config` |
-| staking-vault | `VaultState` |
+| token-fundraiser | `Fundraiser` |
+| escrow | `Offer` (per-offer, not singleton) |
 | erc4626-vault | `Vault` |
 
 The role is identical across all three: a singleton-per-protocol-instance PDA holding governance fields (authority, fee/rate config, cached bumps). Names diverge. Defensible (entity-specific naming) but inconsistent.
@@ -350,8 +350,8 @@ The role is identical across all three: a singleton-per-protocol-instance PDA ho
 
 | Example | Error enum name | Naming of "math overflow" |
 |---|---|---|
-| erc20-token | `TokenError` | `Overflow` |
-| staking-vault | `StakeError` | `Overflow` |
+| token-fundraiser | `FundraiserError` | `Overflow` |
+| escrow | `EscrowError` | `Overflow` |
 | erc4626-vault | `VaultError` | `Overflow` |
 
 Per-entity enum names are fine (idiomatic for distinguishing errors in client code). Variant names `Overflow`, `ZeroAmount`, `InsufficientBalance`, etc. are consistent.
@@ -360,8 +360,8 @@ Per-entity enum names are fine (idiomatic for distinguishing errors in client co
 
 | Example | Where |
 |---|---|
-| erc20-token | Embedded inside §C3 tradeoff |
-| staking-vault | Not present |
+| token-fundraiser | Standalone top-level section after §Idioms |
+| escrow | Standalone top-level section after §Idioms |
 | erc4626-vault | Standalone top-level section after §Idioms |
 
 **This is a real inconsistency.** Two of three examples cover frontend integration with concrete before/after; staking-vault doesn't (likely because the staking-vault's client integration is simpler — the user just calls `stake`/`withdraw` with their ATAs as args, no fundamental shift like share-token integration). But the placement convention varies.

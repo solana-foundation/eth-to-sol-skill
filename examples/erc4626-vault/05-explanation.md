@@ -67,7 +67,10 @@ This 4626 example teaches three Solana-specific lessons beyond the ERC-20 and st
 
 ### PDA bumps cached + canonicalization enforced (diff §Sec3)
 
-- **What / Why / Benefit / Tradeoff:** See `examples/erc20-token` §Sec2. Same pattern applied.
+- **What:** Store `Vault.bump` and `Vault.vault_authority_bump` at init, pass via `bump = vault.bump` in account validation on every subsequent call.
+- **Why:** Re-deriving with `find_program_address` costs ~1500 CU per call. Accepting a non-canonical bump opens a bug class where an attacker passes a different valid bump and the program signs for a different address than it thinks. Pinning the canonical bump at init eliminates both.
+- **Benefit:** Cheaper instructions; closes the non-canonical-bump attack class.
+- **Tradeoff:** Two `u8`s of account space. See `security/pda-canonicalization.md` for the full pattern.
 
 ### Vault-authority signing scoped to the vault key (diff §Sec4)
 

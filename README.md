@@ -23,7 +23,7 @@ Run the eth-to-sol skill on this contract: <paste Solidity or path to .sol file>
 
 The skill reads `SKILL.md`, traverses its decision tree to load only the sub-files relevant to the input, runs the pre-flight checklist, and emits the four artifacts.
 
-For the reference example, the inputs and outputs are pre-built under `examples/erc20-token/`.
+For the reference example, the inputs and outputs are pre-built under `examples/token-fundraiser/` (Solidity ERC-20 crowdfund → canonical `tokens/token-fundraiser` shape from solana-developers/program-examples).
 
 ## Directory layout
 
@@ -51,12 +51,14 @@ eth-to-sol/
 │   ├── cpi-safety.md
 │   └── reentrancy.md
 └── examples/
-    └── erc20-token/
-        ├── 01-original.sol     # standard ERC-20 with mint/burn/approve/Ownable
-        ├── 02-naive-port.rs    # Pass 1: faithful Anchor port
-        ├── 03-optimized.rs     # Pass 2: Solana-native version (SPL Token CPI)
-        ├── 04-diff.md          # structured diff
-        └── 05-explanation.md   # explanation log
+    ├── token-fundraiser/        # ERC-20 crowdfund → goal-or-refund Anchor program
+    │   ├── 01-original.sol     # ERC-20 crowdfund with goal + deadline
+    │   ├── 02-naive-port.rs    # Pass 1: faithful Anchor port (Vec<Contribution>)
+    │   ├── 03-optimized.rs     # Pass 2: per-supporter PDAs, close-on-refund
+    │   ├── 04-diff.md          # structured diff
+    │   └── 05-explanation.md   # explanation log
+    ├── escrow/                  # two-party ERC-20 atomic swap
+    └── erc4626-vault/           # tokenized vault (ERC-4626 share math)
 ```
 
 ## Adding new examples
@@ -67,7 +69,7 @@ The skill is designed so adding examples is mechanical:
 2. Run the skill against it — it produces `02` through `05`.
 3. Do not edit `SKILL.md` or sub-files unless the input exposes a gap in the existing guidance.
 
-Two follow-up examples are planned (DeFi staking, ERC-4626 vault). They should not require sub-file changes.
+Three reference examples ship with the skill (token-fundraiser, escrow, erc4626-vault) covering the most common ERC-20-adjacent translation surface. New examples should not require sub-file changes — if they do, the gap is in the guidance, not the example.
 
 ## Assumptions
 

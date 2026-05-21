@@ -21,7 +21,7 @@ Most OZ contracts have a Solana counterpart that is *not* a Rust port. Use the c
 
 **Implication:** translating an ERC-20 to "an Anchor program that does its own token mechanics" is the wrong answer. The right answer is "an Anchor program that owns the Mint via a PDA and exposes the *governance* layer (who can mint, with what cap, etc.), while transfers happen on SPL Token directly."
 
-See `examples/erc20-token/03-optimized.rs` for the canonical shape.
+For a worked example of "Anchor program holds the mint via PDA, governance instructions only", see `examples/erc4626-vault/03-optimized.rs` (vault shares as an SPL Mint owned by a PDA).
 
 ### Allowance gap
 

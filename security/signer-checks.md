@@ -112,7 +112,7 @@ pub struct Withdraw<'info> {
 
 The vault_authority PDA itself never stores a field — it's the program-derived identity, signed for via `invoke_signed` whenever the program needs to move pool funds.
 
-Used by `examples/erc20-token` (mint_authority PDA, separate from `Config.authority`), `examples/staking-vault` (vault_authority PDA, separate from `VaultState.authority`), and `examples/erc4626-vault` (vault_authority PDA dual-rules as both Mint authority and reserve authority).
+Used by `examples/token-fundraiser` (the `Fundraiser` PDA is the vault TokenAccount's authority — signing for it on `claim` and `refund`), `examples/escrow` (per-offer vault_authority PDA), and `examples/erc4626-vault` (vault_authority PDA dual-rules as both Mint authority and reserve authority).
 
 ## Common mistakes porting from EVM
 

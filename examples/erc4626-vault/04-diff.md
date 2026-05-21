@@ -38,7 +38,7 @@ pub struct Vault {
 }
 ```
 
-Shares live in user-owned SPL Token Accounts; the vault no longer tracks per-user share balances. Same lesson as `examples/erc20-token` §S2, applied to a different token.
+Shares live in user-owned SPL Token Accounts; the vault no longer tracks per-user share balances. See `optimization/account-model.md` — the general "per-account, not per-contract" rule applied to shares.
 
 ---
 
@@ -63,7 +63,7 @@ Naive: no `share_transfer`/`share_approve` instructions (omitted for brevity). T
 
 Optimized: share transfer/approve happen via SPL Token directly. Clients call `spl_token::transfer` / `spl_token::approve` against their share ATA. Withdraw/redeem use SPL Token's built-in delegate (see §C2).
 
-Same lesson as `examples/erc20-token` §C3, generalized to vault shares.
+See `translation/stdlib-mapping.md` — same "transfers run on SPL Token, the program handles governance only" pattern, applied to vault shares.
 
 ---
 
@@ -174,7 +174,7 @@ Naive — bare `bump` on every PDA constraint (`02-naive-port.rs:377`, `:381`, `
 
 Optimized — `Vault.bump` and `Vault.vault_authority_bump` stored at init (`03-optimized.rs:75`–`76`), supplied on every subsequent access (`03-optimized.rs:530`, `:537`, `:546`, `:573`, `:580`, `:589`, `:617`, `:625`, `:634`, `:662`).
 
-Same reasoning as `examples/erc20-token` §Sec2 and `examples/staking-vault` §Sec3.
+See `security/pda-canonicalization.md` for the full pattern: storing the canonical bump pins the PDA identity at init, eliminates the non-canonical-bump bug class, and skips the ~1500 CU cost of `find_program_address` on every call.
 
 ---
 
@@ -218,7 +218,7 @@ Naive: balance updates are direct Vec mutations.
 
 Optimized (`03-optimized.rs:420`–`443` mint helper; `:188`–`:198` burn at withdraw site): `token::mint_to` for share issuance (signed by `vault_authority` PDA); `token::burn` for share destruction (signed by the user or their delegate).
 
-Mirror of the ERC-20 example's mint-via-CPI pattern (`examples/erc20-token` §C1).
+The canonical "program mints via CPI, signed by an authority PDA" pattern — see `translation/stdlib-mapping.md`.
 
 ---
 

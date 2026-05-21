@@ -105,7 +105,7 @@ Example entry:
 
 ## Reference example
 
-Trace the protocol on `examples/erc20-token/` end-to-end before producing translations of new inputs. The example exists so you can verify the protocol produces the contract.
+Trace the protocol on `examples/token-fundraiser/` end-to-end before producing translations of new inputs. The example exists so you can verify the protocol produces the contract.
 
 ## Ambiguities
 
