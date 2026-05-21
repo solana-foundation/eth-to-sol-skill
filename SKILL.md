@@ -83,7 +83,7 @@ Every item must hold before emitting `03-optimized.rs`. If one fails, fix and re
 
 ## Explanation log schema
 
-Each entry is exactly four fields. Keep them tight — one to three sentences each.
+Each entry is exactly four fields. Keep them tight — one to four sentences each.
 
 ```
 ### <short title>
@@ -96,15 +96,60 @@ Each entry is exactly four fields. Keep them tight — one to three sentences ea
 
 Group entries under thematic headers: `## State model`, `## Parallelism`, `## Security`, `## CPI & program reuse`, `## Compute & rent`, `## Idioms`.
 
-Example entry:
+## Explanation style — write for a Solidity-fluent reader who has never seen Solana
+
+The reader knows Solidity well. They know financial systems. They have **not** internalized PDAs, the account model, SPL Token, rent, CPI, or Anchor's constraint vocabulary. The explanation log is where they bridge — every entry must land for that reader.
+
+### Rules
+
+1. **First-use translation, always inline.** The first time any Solana-specific term appears in a given explanation log, give a short EVM analog in parentheses or em-dashes. Don't assume a glossary; weave it into the prose. After first use, the term is fair game.
+
+   Required glossing on first use (non-exhaustive):
+   - **PDA** — "PDA (Program-Derived Address — a deterministic account address derived from seeds the program controls; analog of a Solidity storage slot keyed by `(address, mapping)` — but each PDA is its own account, not a slot inside the program)"
+   - **SPL Token** — "SPL Token (the shared on-chain token program every fungible token reuses on Solana — instead of each ERC-20 deploying its own contract, every token is just configuration on this one program)"
+   - **CPI** — "CPI (cross-program invocation — Solana's version of one contract `call`-ing another, but every account the callee will touch must already be in the caller's transaction)"
+   - **rent** — "rent (a refundable SOL deposit every account pays to live on-chain; ~0.001 SOL per KB of account data, returned in full when the account is closed)"
+   - **lamports** — "lamports (1 SOL = 1e9 lamports — Solana's gwei equivalent, but at 9 decimals instead of 18)"
+   - **ATA / Associated Token Account** — "ATA (Associated Token Account — the canonical per-wallet token account for a given mint, with a deterministically derivable address; the analog of \"the wallet's balance for this token\")"
+   - **Mint account** — "Mint account (the on-chain configuration for a token: total supply, decimals, who can mint — owned by the SPL Token program, not by the issuer)"
+   - **Signer<'info>** — "Signer (an explicit `msg.sender` — Solana requires every signing account to be declared up front in the instruction's account list, vs. Solidity's implicit `msg.sender`)"
+   - **Anchor** — "Anchor (the framework on top of raw Solana programs, similar to how Hardhat relates to raw EVM — provides macros, account validation, and the IDL)"
+   - **init_if_needed** — "init_if_needed (an Anchor constraint that creates the account on first call and is a no-op on subsequent calls — Solana's closest analog to Solidity's implicit `mapping[key] = value`)"
+   - **close = X** — "close = X (an Anchor constraint that tears the account down and refunds its rent to X when the instruction succeeds — there's no Solidity equivalent because Solidity storage slots can't be deleted)"
+   - **discriminator** — "discriminator (an 8-byte type tag Anchor prepends to every account it manages, so deserializing a `Vault` account as a `Mint` fails loudly — no EVM analog because EVM has no typed account model)"
+   - **has_one** — "has_one = authority (an Anchor constraint that verifies the account's stored `authority` field equals the `authority` account passed in the same instruction — the declarative form of `require(state.authority == signer)`)"
+   - **seeds + bump** — "seeds (the byte inputs the program uses to derive a PDA; the `bump` is a nonce that makes the address valid). Conceptually: `keccak256(abi.encodePacked(...))` with extra steps to keep the result off the secp256k1 curve."
+   - **write-lock / parallelism** — "Solana's runtime locks every writable account a transaction touches, so two transactions that mutate different accounts run in parallel — the EVM-style global single-threaded execution is replaced by per-account locks (Sealevel)."
+
+2. **Comparative framing in Why bullets.** Prefer "In Solidity, you would have written X because Y. On Solana, the equivalent shape is Z because W" over "the PDA stores X". The reader anchors on what they already know.
+
+3. **Plain-English code references.** When citing a Rust line by `file:line`, briefly say what it does in EVM-flavored language. Not just `f.contributors.iter_mut().find(|c| c.who == k)` — say "scans the contributor list linearly to find the supporter's row (the on-chain analog of `contributors[k]` in Solidity, but more expensive)."
+
+4. **Spell out the consequence chain.** The reader doesn't yet know why "one PDA per supporter" matters. Don't say "no serialization of cross-supporter activity" without first explaining that Solana serializes writes to the *same account*, so isolating writes to different accounts is what unlocks parallelism. Two sentences > one tight one if the second sentence is doing teaching work.
+
+5. **Tradeoff is honest.** Rent, extra accounts, Anchor-specific idioms a non-Anchor reader has to learn — name them concretely. The reader is evaluating a real migration; gloss only hurts.
+
+### Side-by-side: bad → better
+
+The current `examples/token-fundraiser/05-explanation.md` entry for §S1 reads:
+
+> **Why:** Solidity's `mapping(address => uint256)` is one slot per supporter inside one contract — addressable by key inside one storage tree. The Solana equivalent is one account per supporter, addressable by PDA derivation. A `Vec` inside a state account is the wrong primitive: it bounds the supporter count, forces every contribute/refund to mutate the singleton state account, and scans linearly on lookup.
+
+A Solidity-fluent reader who's never seen Solana parses "PDA derivation" as noise. Better:
+
+> **Why:** In Solidity, `mapping(address => uint256) contributions` puts every supporter at a deterministic storage slot inside the contract — `contributions[alice]` lands at `keccak256(alice, slot)`. The Solana equivalent is one *account* per supporter — a PDA (Program-Derived Address; same idea, but each entry is its own on-chain account at a deterministic address derived from `[b"contributor", fundraiser, alice]`, not a slot inside the program). A `Vec<Contribution>` on a single state account would imitate the Solidity layout but it loses the per-account property: Solana's runtime locks every writable account a transaction touches, so two supporters contributing at the same time would serialize on the shared state account. One PDA per supporter is what lets the two writes run in parallel.
+
+Same content, ~2× the words, lands for the reader. **Err on the side of teaching.** Length is not a virtue; clarity for the assumed reader is. If a section already used the term, you don't need to re-explain it — the rule is "first use in this explanation log."
+
+### Original example entry (for structure reference)
 
 ```
 ### Balances moved from on-chain map to SPL Token accounts
 
-- **What:** Removed `balances: Vec<BalanceEntry>` from `TokenState` (`02-naive-port.rs:153`). Each holder now has an Associated Token Account owned by SPL Token; transfers go through `token::transfer` directly, not through this program (`03-optimized.rs` has no transfer instruction).
-- **Why:** Solana state is per-account, not per-contract. A `Vec` inside one account forces every transfer in the system to write-lock that account, serializing all transfers. SPL Token already implements correct, audited fungible-token mechanics with per-account storage.
-- **Benefit:** Transfers between disjoint sender/recipient pairs parallelize. ~150 lines of custom balance/allowance logic deleted. No path for a buggy balance update.
-- **Tradeoff:** Holders create an ATA before first receipt (one-time ~0.002 SOL rent). Off-chain code computes ATAs to read balances rather than reading one contract account.
+- **What:** Removed `balances: Vec<BalanceEntry>` from `TokenState` (`02-naive-port.rs:153`). Each holder now has an Associated Token Account (ATA — the canonical per-wallet token balance account, derived deterministically from `(wallet, mint)`); transfers go through `token::transfer` on the SPL Token program directly, not through this program (`03-optimized.rs` has no transfer instruction).
+- **Why:** In Solidity, an ERC-20 contract holds the balance ledger itself — `mapping(address => uint256) balanceOf` inside the contract. On Solana, the SPL Token program is the shared ledger for every fungible token on the network; each holder gets their own on-chain account (an ATA) and transfers move balances between those accounts directly. Keeping a custom `Vec` would force every transfer in the system to write-lock the same state account, serializing all of them, while reimplementing mechanics SPL Token already audits.
+- **Benefit:** Transfers between disjoint sender/recipient pairs run in parallel (Solana's runtime locks accounts, not the program — so writes to Alice→Bob and Carol→Dan don't block each other). ~150 lines of custom balance/allowance logic deleted. No path for a buggy custom balance update.
+- **Tradeoff:** Holders create an ATA before first receipt — a one-time ~0.002 SOL rent deposit (refundable when the account is closed). Off-chain code computes ATA addresses to read balances instead of reading one contract account.
 ```
 
 ## Reference example
