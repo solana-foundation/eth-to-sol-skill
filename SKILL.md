@@ -107,11 +107,16 @@ Each entry is exactly four fields. Keep them tight — one to four sentences eac
 ```
 ### <short title>
 
-- **What:** the concrete change. Reference the diff section or `file:line` in the .rs files.
-- **Why:** the underlying Solana property that motivates it. Connect to the Ethereum equivalent the developer is leaving behind.
+- **What:** the concrete change. Reference the diff section or `file:line` in the .rs files. This is the LOW-LEVEL view; cite specific identifiers, function names, line numbers.
+- **Why:** the platform-level reasoning, written as TWO sentence-level lead-ins:
+    - First sentence(s) must start with **"On Ethereum, ..."** and describe the EVM/Solidity paradigm at play — what the developer's mental model assumes.
+    - Following sentence(s) must start with **"On Solana, ..."** and describe the Solana paradigm that diverges — why the EVM mental model breaks here.
+    Keep it HIGH-LEVEL — platform mechanics, not code identifiers. Save the per-line / per-symbol detail for `What:` and for inline annotations in the code itself. No backtick code fragments unless absolutely necessary.
 - **Benefit:** what is gained. Be specific: CU saved, parallelism unlocked, security class avoided, code deleted.
 - **Tradeoff:** what is given up. If nothing meaningful, say so and justify briefly.
 ```
+
+The `On Ethereum` / `On Solana` lead-ins are load-bearing — the UI renders the Why field in two columns split on those markers. Drop the lead-ins and the columns collapse into a single block.
 
 Group entries under thematic headers: `## State model`, `## Parallelism`, `## Security`, `## CPI & program reuse`, `## Compute & rent`, `## Idioms`.
 
@@ -154,11 +159,11 @@ The current `examples/token-fundraiser/05-explanation.md` entry for §S1 reads:
 
 > **Why:** Solidity's `mapping(address => uint256)` is one slot per supporter inside one contract — addressable by key inside one storage tree. The Solana equivalent is one account per supporter, addressable by PDA derivation. A `Vec` inside a state account is the wrong primitive: it bounds the supporter count, forces every contribute/refund to mutate the singleton state account, and scans linearly on lookup.
 
-A Solidity-fluent reader who's never seen Solana parses "PDA derivation" as noise. Better:
+A Solidity-fluent reader who's never seen Solana parses "PDA derivation" as noise. Better — high-level, two clearly-marked sides:
 
-> **Why:** In Solidity, `mapping(address => uint256) contributions` puts every supporter at a deterministic storage slot inside the contract — `contributions[alice]` lands at `keccak256(alice, slot)`. The Solana equivalent is one *account* per supporter — a PDA (Program-Derived Address; same idea, but each entry is its own on-chain account at a deterministic address derived from `[b"contributor", fundraiser, alice]`, not a slot inside the program). A `Vec<Contribution>` on a single state account would imitate the Solidity layout but it loses the per-account property: Solana's runtime locks every writable account a transaction touches, so two supporters contributing at the same time would serialize on the shared state account. One PDA per supporter is what lets the two writes run in parallel.
+> **Why:** On Ethereum, contract storage is global to the contract: every entry in a mapping lives in the same storage tree, and the contract is the single writer. On Solana, the equivalent of a mapping is *one on-chain account per entry* — each entry owns its own slice of state, with its own deterministic address, its own owner, and its own write-lock. The naive port collapses every entry back into one shared state account; that imitates the Solidity layout but loses the per-entry property that lets unrelated writes execute concurrently.
 
-Same content, ~2× the words, lands for the reader. **Err on the side of teaching.** Length is not a virtue; clarity for the assumed reader is. If a section already used the term, you don't need to re-explain it — the rule is "first use in this explanation log."
+Same content, lower code density, lands for the reader. **Err on the side of teaching.** Length is not a virtue; clarity for the assumed reader is. Code-level identifiers belong in `What:` and in inline annotations on the .rs file — the `Why:` field is for the platform mental model. If a section already used the term, you don't need to re-explain it — the rule is "first use in this explanation log."
 
 ### Original example entry (for structure reference)
 
@@ -166,7 +171,7 @@ Same content, ~2× the words, lands for the reader. **Err on the side of teachin
 ### Balances moved from on-chain map to SPL Token accounts
 
 - **What:** Removed `balances: Vec<BalanceEntry>` from `TokenState` (`02-naive-port.rs:153`). Each holder now has an Associated Token Account (ATA — the canonical per-wallet token balance account, derived deterministically from `(wallet, mint)`); transfers go through `token::transfer` on the SPL Token program directly, not through this program (`03-optimized.rs` has no transfer instruction).
-- **Why:** In Solidity, an ERC-20 contract holds the balance ledger itself — `mapping(address => uint256) balanceOf` inside the contract. On Solana, the SPL Token program is the shared ledger for every fungible token on the network; each holder gets their own on-chain account (an ATA) and transfers move balances between those accounts directly. Keeping a custom `Vec` would force every transfer in the system to write-lock the same state account, serializing all of them, while reimplementing mechanics SPL Token already audits.
+- **Why:** On Ethereum, an ERC-20 contract holds the balance ledger inside its own storage — every holder is a slot in the contract's `balanceOf` map, and every transfer is a contract call to that contract. On Solana, balances live in the network-wide SPL Token program rather than inside any individual program — each holder has their own on-chain account, and transfers move balances directly between those accounts without going through the issuing program at all. Keeping a custom map would re-implement that shared infrastructure inside the program and force every transfer to write-lock the program's state.
 - **Benefit:** Transfers between disjoint sender/recipient pairs run in parallel (Solana's runtime locks accounts, not the program — so writes to Alice→Bob and Carol→Dan don't block each other). ~150 lines of custom balance/allowance logic deleted. No path for a buggy custom balance update.
 - **Tradeoff:** Holders create an ATA before first receipt — a one-time ~0.002 SOL rent deposit (refundable when the account is closed). Off-chain code computes ATA addresses to read balances instead of reading one contract account.
 ```
