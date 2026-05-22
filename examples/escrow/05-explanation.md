@@ -2,11 +2,9 @@
 
 One entry per change in `04-diff.md`, grouped by theme. Each entry follows the schema: **What / Why / Benefit / Tradeoff**.
 
-This example translates a textbook ERC-20 atomic swap — two parties, one trade, no trust — into the canonical `program-examples/tokens/escrow` shape, and teaches three Solana ideas a Solidity developer has to internalize:
+This is a textbook two-asset atomic swap: a maker offers some amount of one ERC-20 in exchange for some amount of another; a taker who's willing to trade fulfills the offer atomically; either party can cancel before fulfillment. The Solidity version keeps an offer book at `mapping(uint256 => Offer)` inside the contract plus a `nextOfferId` counter, escrows tokens with `transferFrom`, and tracks each offer's lifecycle with a status field that auth checks gate on.
 
-1. **Per-entity PDAs replace `mapping(id => entity)`.** In Solidity the offer book is `mapping(uint256 => Offer)`; in Solana there is no mapping, so the same logical book becomes one *account* per offer, addressed deterministically from `(maker, id)`. PDAs (Program-Derived Addresses) are how you "key" data on Solana.
-2. **Per-instance authority PDAs scope blast radius.** The PDA that signs token transfers out of an offer's vault is itself per-offer. A bug in one offer's release path cannot drain another offer's funds, because the signing identity is cryptographically bound to one offer.
-3. **`init` + `close` is the state lifecycle.** Solidity tracks "open / cancelled / taken" with a status field inside a mapping entry. Solana lets accounts come into and go out of existence; the existence of the `Offer` account *is* the offer's "open" status. No flag needed.
+On Solana the same protocol becomes one `Offer` PDA per offer (derived from `[b"offer", maker, id]`) plus a per-offer vault Token Account that holds the escrowed tokens. There's no offer-book contract — the offers exist as standalone accounts that come into existence on `make_offer` and get deleted on `take_offer` / `cancel_offer`, so account existence *is* the lifecycle and no status field is needed. The reference Solana shape is `tokens/escrow` in solana-developers/program-examples.
 
 Vocabulary that comes up below, with EVM analogs:
 
@@ -24,7 +22,7 @@ After first use, each term is fair game.
 
 ## State model
 
-### Global `EscrowState` with `Vec<Offer>` → per-offer PDA (diff §S1)
+### `mapping(uint256 => Offer)` offer book → per-offer PDA (diff §S1)
 
 - **What:** Removed the `EscrowState` account entirely (`02-naive-port.rs:313`). Each offer is now a standalone account — a PDA derived from `[b"offer", maker.as_ref(), &id.to_le_bytes()]` (`03-optimized.rs:322`). One account per offer, addressable deterministically from the maker plus an id the maker chooses.
 - **Annotation:** This program has no central offer book — each offer owns its own `Offer` account derived from `[b"offer", maker, id]`. Solidity would keep the offers at `mapping(uint256 => Offer)` slots inside a single contract; on Solana the runtime locks every writable account a transaction touches, so a shared offer book would make two takers fulfilling unrelated offers serialize on the same state account. Per-offer PDAs keep the writable sets disjoint and unlock parallel execution.
@@ -32,7 +30,7 @@ After first use, each term is fair game.
 - **Benefit:** Unbounded open offers — the naive's `MAX_OFFERS = 50` cap is gone. Two unrelated offers' take/cancel transactions run in parallel on Solana's scheduler (no shared writable surface). Every take/cancel touches only that offer's own account, not the whole book. Adding `maker` to the seeds means each maker has their own id-space — they can't accidentally collide with another maker's id.
 - **Tradeoff:** Two accounts created per offer (the Offer PDA + a vault Token Account that holds the escrowed tokens) instead of one global state account. Both refund their rent on close, so the steady-state footprint is identical — only the maker's temporary deposit while the offer is open changes. This is standard Solana UX: callers pay rent for the state they create, and recover it when the state goes away.
 
-### `next_offer_id` counter deleted (diff §S2)
+### Contract-side `++nextOfferId` → client-supplied id (diff §S2)
 
 - **What:** Removed the `next_offer_id: u64` field and its `+= 1` increment (`02-naive-port.rs:64`). The maker now supplies an `id: u64` as an instruction argument (`03-optimized.rs:37`).
 - **Annotation:** The maker passes their own `id` into `make_offer`; nothing in the program increments a shared counter. A global counter would force every concurrent maker to serialize on whichever account stored it — Solidity has no parallel execution to lose anyway, so contract-side auto-increment is free there, but on Solana a write-hot counter is the easiest way to kill throughput. Re-init protection is preserved by Anchor's `init` constraint: reusing an id reverts at account validation because the PDA already exists.
@@ -40,7 +38,7 @@ After first use, each term is fair game.
 - **Benefit:** No global serialization point. Re-init protection is still enforced — Anchor's `init` constraint refuses to create a PDA at an address that already exists, so if the maker reuses an id they've used before, the instruction reverts at account validation before the handler body runs. The seeds `[b"offer", maker, id]` mean each maker has their own id-space; they can't conflict with another maker.
 - **Tradeoff:** Clients must pick ids. In practice they generate them trivially (`Date.now()` or `crypto.randomBytes(8)` works); document the convention. The EVM equivalent of "I trust the client to pick a unique nonce" is mildly unusual to Solidity developers used to contract-side auto-increment, but the cost of getting it wrong is just a clear instruction revert.
 
-### Shared vault Token Account → per-offer vault (diff §S3)
+### Shared `balanceOf[contract]` custody → per-offer vault (diff §S3)
 
 - **What:** Replaced the singleton vault Token Account (one account holding *all* escrowed tokens) with one Token Account per offer, derived from `[b"vault", offer.key().as_ref()]` (`03-optimized.rs:206`–`214`). The vault is itself a PDA.
 - **Annotation:** Every offer escrows its tokens into its own per-offer vault Token Account, derived from `[b"vault", offer]`. A Token Account on Solana is one balance for one authority — a shared vault would commingle every open offer's escrowed tokens in the same balance, and a bug in `take_offer` (wrong amount, wrong offer read) could let one taker drain another offer's funds. Per-offer vaults make the isolation cryptographic: the vault for offer X simply cannot hold tokens belonging to offer Y.
@@ -60,7 +58,7 @@ After first use, each term is fair game.
 - **Benefit:** Throughput scales with offer count instead of being floored by a single hot account. Two unrelated makers creating offers run concurrently. Two unrelated takers fulfilling offers run concurrently. This is the cleanest parallelism profile across the curated examples — no residual contention floor of any kind.
 - **Tradeoff:** None. The naive design's singleton state was a pure cost, not a feature; this is the move you make every time the source design is `mapping(id => entity)`.
 
-### O(n) Vec scans eliminated (diff §P2)
+### `offers[id]` lookup → direct PDA derivation (diff §P2)
 
 - **What:** Removed the `iter().position(|o| o.id == id)` lookups (`02-naive-port.rs:99`, `:166`) — the naive scanned the offer list linearly to find the matching id. The optimized version derives the PDA address directly from `(maker, id)` and Anchor loads exactly that account.
 - **Annotation:** There's no offer-lookup loop here — Anchor loads the exact `Offer` PDA the instruction's seeds derive from `(maker, id)`, and the handler operates directly on `ctx.accounts.offer`. A naive port scanning a `Vec<Offer>` on a shared state account would do work linear in the number of open offers AND would have to deserialize the whole multi-KB account every call. PDA derivation is O(1) and only the offer's own ~130-byte account is touched.
@@ -90,7 +88,7 @@ After first use, each term is fair game.
 - **Benefit:** Blast radius is isolated by construction. A bug that exfiltrates funds from one offer cannot reach any other. This is the Solana equivalent of "least-privilege signing" applied to on-chain accounts.
 - **Tradeoff:** One more byte stored per Offer (`vault_authority_bump`). Negligible.
 
-### `has_one` for maker (diff §Sec3)
+### `require(msg.sender == offer.maker)` → `has_one = maker` (diff §Sec3)
 
 - **What:** Replaced runtime `require_keys_eq!(offer.maker, signer.key())` checks (`02-naive-port.rs:170`) with a `has_one = maker` constraint on the Offer account (`03-optimized.rs:236`, `:285`). `has_one = maker` tells Anchor "the account's `maker` field must equal the `maker` account passed into this instruction" — the declarative form of the runtime check.
 - **Annotation:** Auth for `cancel_offer` is the `has_one = maker` constraint on the struct, not a `require!` line at the top of the handler. Solidity would check `require(msg.sender == offer.maker)` inside the function body; here Anchor verifies the same equality before any handler code runs and the rule surfaces in the program's IDL so off-chain tooling sees the access check too. Easier to audit — a reviewer scans the struct definition to see who can call what.
@@ -98,7 +96,7 @@ After first use, each term is fair game.
 - **Benefit:** Fewer foot-guns. The access-control rule is visible at the top of the struct, not buried in instruction logic.
 - **Tradeoff:** None. The constraint compiles to the same check; it just lives in a better place.
 
-### Mint cross-validation as constraints (diff §Sec4)
+### `require(token == offer.token)` → struct-level constraint (diff §Sec4)
 
 - **What:** Three runtime `require_keys_eq!` checks comparing the offered/wanted token mints against the offer's stored mints were replaced with two `constraint = offer.token_X == token_X_mint.key()` declarations on the account struct (`03-optimized.rs:238`–`239`).
 - **Annotation:** The "mints passed in must match the offer's stored mints" rule lives on the Offer's struct as `constraint = offer.token_X == token_X_mint.key()`, not as `require_keys_eq!` lines inside `take_offer`. Declarative when the rule is "this account's field must match that account's field" beats runtime — the check runs before the handler executes and is visible in the IDL. Audit surface narrows from "read every handler body" to "read the struct definitions".
@@ -118,7 +116,7 @@ After first use, each term is fair game.
 
 ## CPI & program reuse
 
-### Atomic `take_offer` with vault closure (diff §C1)
+### `selfdestruct`-style cleanup on take, atomically (diff §C1)
 
 - **What:** `take_offer` now includes a `token::close_account` CPI (`03-optimized.rs:124`–`133`) that closes the vault Token Account after draining it, and Anchor's `close = maker` constraint (`:242`) closes the Offer PDA itself. Both accounts' rent deposits refund to the maker.
 - **Annotation:** When the offer is taken, both accounts get torn down atomically: a `token::close_account` CPI destroys the vault Token Account, and the `close = maker` constraint on the struct destroys the `Offer` PDA, with rent deposits flowing back to the maker. Solidity's nearest analog is `selfdestruct` (deprecated and never really applied to mapping entries anyway). Without this cleanup the accounts would linger forever holding their rent deposits — recoverable in principle, but only via a separate cleanup instruction.
@@ -156,7 +154,7 @@ After first use, each term is fair game.
 
 ## Idioms
 
-### `init` + `close` as state lifecycle (diff §I1)
+### Mapping `status` flag → account-existence lifecycle (diff §I1)
 
 - **What:** The Offer account exists exactly while the offer is open. `init` creates it on `make_offer`, `close = maker` deletes it on `take_offer` or `cancel_offer`. The vault Token Account mirrors this lifecycle via `init` and `token::close_account` CPIs.
 - **Annotation:** "Is this offer still open?" is "does this `Offer` account exist?" — the account is created by `init` in `make_offer` and destroyed by `close = maker` in `take_offer` / `cancel_offer`. There's no `status: Open | Cancelled | Taken` field anywhere because Solana lets accounts come and go and the runtime tells you about existence for free at account validation. In Solidity mapping entries are always present and you have to track liveness with a status flag plus a runtime check.
@@ -164,7 +162,7 @@ After first use, each term is fair game.
 - **Benefit:** No bookkeeping bugs around "did we forget to clear this flag?". The runtime gives you the lifecycle property structurally.
 - **Tradeoff:** Reading historical offers (after they've been closed) requires either program logs or an off-chain indexer, since the on-chain account is gone. Standard Solana UX; protocols that need historical state typically emit events (Anchor's `emit!` macro writes them to transaction logs) for indexers to pick up.
 
-### `id` supplied by the maker (diff §I2)
+### Contract-side id → caller-supplied id (diff §I2)
 
 - **What:** `make_offer` takes `id: u64` as its first argument; clients pick the value (timestamp, random nonce, etc.).
 - **Annotation:** `make_offer` takes the `id` as a client-supplied argument — typically a timestamp or random nonce. A naive port using a contract-side auto-increment counter would force every `make_offer` to write-lock the counter account and serialize all concurrent makers. Per-`(maker, id)` PDA addressing means each maker has their own id-space and id reuse fails cleanly at account validation when `init` finds the PDA already exists.
