@@ -108,15 +108,10 @@ Each entry is exactly four fields. Keep them tight — one to four sentences eac
 ### <short title>
 
 - **What:** the concrete change. Reference the diff section or `file:line` in the .rs files. This is the LOW-LEVEL view; cite specific identifiers, function names, line numbers.
-- **Why:** the platform-level reasoning, written as TWO sentence-level lead-ins:
-    - First sentence(s) must start with **"On Ethereum, ..."** and describe the EVM/Solidity paradigm at play — what the developer's mental model assumes.
-    - Following sentence(s) must start with **"On Solana, ..."** and describe the Solana paradigm that diverges — why the EVM mental model breaks here.
-    Keep it HIGH-LEVEL — platform mechanics, not code identifiers. Save the per-line / per-symbol detail for `What:` and for inline annotations in the code itself. No backtick code fragments unless absolutely necessary.
+- **Why:** the platform-level reasoning, structured as a two-sided contrast for a Solidity-fluent reader. Lead the first sentence(s) with **"On Ethereum, ..."** and describe the EVM/Solidity paradigm the developer is bringing with them. Then lead the next sentence(s) with **"On Solana, ..."** and describe the paradigm that diverges. Keep it HIGH-LEVEL — platform mechanics, mental model, what serializes / what doesn't, who owns what, what the runtime guarantees. Save the per-line / per-symbol detail for `What:`. Avoid backtick code fragments here unless absolutely necessary.
 - **Benefit:** what is gained. Be specific: CU saved, parallelism unlocked, security class avoided, code deleted.
 - **Tradeoff:** what is given up. If nothing meaningful, say so and justify briefly.
 ```
-
-The `On Ethereum` / `On Solana` lead-ins are load-bearing — the UI renders the Why field in two columns split on those markers. Drop the lead-ins and the columns collapse into a single block.
 
 Group entries under thematic headers: `## State model`, `## Parallelism`, `## Security`, `## CPI & program reuse`, `## Compute & rent`, `## Idioms`.
 
