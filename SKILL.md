@@ -102,16 +102,19 @@ Only emit the artifact once the loop terminates. This is in addition to — not 
 
 ## Explanation log schema
 
-Each entry is exactly four fields. Keep them tight — one to four sentences each.
+Each entry is exactly five fields. Keep them tight — one to four sentences each.
 
 ```
 ### <short title>
 
-- **What:** the concrete change. Reference the diff section or `file:line` in the .rs files. This is the LOW-LEVEL view; cite specific identifiers, function names, line numbers.
-- **Why:** the platform-level reasoning, structured as a two-sided contrast for a Solidity-fluent reader. Lead the first sentence(s) with **"On Ethereum, ..."** and describe the EVM/Solidity paradigm the developer is bringing with them. Then lead the next sentence(s) with **"On Solana, ..."** and describe the paradigm that diverges. Keep it HIGH-LEVEL — platform mechanics, mental model, what serializes / what doesn't, who owns what, what the runtime guarantees. Save the per-line / per-symbol detail for `What:`. Avoid backtick code fragments here unless absolutely necessary.
+- **What:** the concrete change as a diff between the naive port and the optimized port. Reference the diff section or `file:line` in the .rs files. This is the LOW-LEVEL diff view; cite specific identifiers, function names, line numbers. Written for someone reviewing the diff side-by-side.
+- **Annotation:** a self-contained explanation of THIS code (the optimized version) for a Solidity-fluent reader who is looking only at the optimized file and has never seen the naive port. State what the optimized code does at this point, why a Solidity developer's mental model has to shift here, and — when meaningful — what a naive translation would have done and why this shape is preferable. Do NOT cite the naive port by filename or reference any line outside the optimized file. Two to four sentences.
+- **Why:** the platform-level reasoning, structured as a two-sided contrast for a Solidity-fluent reader. Lead the first sentence(s) with **"On Ethereum, ..."** and describe the EVM/Solidity paradigm the developer is bringing with them. Then lead the next sentence(s) with **"On Solana, ..."** and describe the paradigm that diverges. Keep it HIGH-LEVEL — platform mechanics, mental model, what serializes / what doesn't, who owns what, what the runtime guarantees. Save the per-line / per-symbol detail for `What:` and `Annotation:`. Avoid backtick code fragments here unless absolutely necessary.
 - **Benefit:** what is gained. Be specific: CU saved, parallelism unlocked, security class avoided, code deleted.
 - **Tradeoff:** what is given up. If nothing meaningful, say so and justify briefly.
 ```
+
+`What` is the "code review" view of the diff; `Annotation` is the "reader of the final code" view. They cover different audiences — both are needed because the final code is shipped on its own, but the diff is also part of the artifact set.
 
 Group entries under thematic headers: `## State model`, `## Parallelism`, `## Security`, `## CPI & program reuse`, `## Compute & rent`, `## Idioms`.
 
@@ -166,6 +169,7 @@ Same content, lower code density, lands for the reader. **Err on the side of tea
 ### Balances moved from on-chain map to SPL Token accounts
 
 - **What:** Removed `balances: Vec<BalanceEntry>` from `TokenState` (`02-naive-port.rs:153`). Each holder now has an Associated Token Account (ATA — the canonical per-wallet token balance account, derived deterministically from `(wallet, mint)`); transfers go through `token::transfer` on the SPL Token program directly, not through this program (`03-optimized.rs` has no transfer instruction).
+- **Annotation:** This program holds no balance ledger of its own — there's no `balanceOf` map, no `transferFrom`, no custody field anywhere in this file. On Solana, fungible-token balances live in the network's SPL Token program; each holder owns their own token account, and transfers run as direct CPIs to SPL Token rather than going through this program. Re-implementing a custom `mapping(address => uint256)` here would force every transfer in the system to write-lock this program's state and serialize them all.
 - **Why:** On Ethereum, an ERC-20 contract holds the balance ledger inside its own storage — every holder is a slot in the contract's `balanceOf` map, and every transfer is a contract call to that contract. On Solana, balances live in the network-wide SPL Token program rather than inside any individual program — each holder has their own on-chain account, and transfers move balances directly between those accounts without going through the issuing program at all. Keeping a custom map would re-implement that shared infrastructure inside the program and force every transfer to write-lock the program's state.
 - **Benefit:** Transfers between disjoint sender/recipient pairs run in parallel (Solana's runtime locks accounts, not the program — so writes to Alice→Bob and Carol→Dan don't block each other). ~150 lines of custom balance/allowance logic deleted. No path for a buggy custom balance update.
 - **Tradeoff:** Holders create an ATA before first receipt — a one-time ~0.002 SOL rent deposit (refundable when the account is closed). Off-chain code computes ATA addresses to read balances instead of reading one contract account.
