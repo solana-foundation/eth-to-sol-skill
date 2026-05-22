@@ -100,6 +100,15 @@ Only emit the artifact once the loop terminates. This is in addition to — not 
 
 **Do not use any other Solana MCP tool** (`list_sections`, `read_section`, `search`, etc.) for this workflow. Stay scoped to `rust_autofixer`.
 
+## Explanation log opener
+
+Before the first `## Theme` heading, the explanation log opens with a short prose preamble. The preamble must, in this order:
+
+1. **One paragraph: what the program does in EVM-developer terms.** State the protocol the way you'd state it to a Solidity dev who's never seen the contract — "a one-shot ERC-20 crowdfund: supporters deposit tokens before a deadline; if the goal is met the creator claims the pot, otherwise supporters refund." Don't lead with what the example *teaches*; lead with what the program *does*.
+2. **One paragraph: the Solana shape it ports to.** What the program looks like on Solana at the same height of abstraction — "On Solana, the same protocol becomes one PDA per supporter plus a singleton fundraiser account; SPL Token handles the actual token movement via CPIs." Still no per-line / per-symbol detail.
+
+Optional sections that follow (vocabulary list, reference shape, etc.) get rendered separately by downstream consumers — keep them after the two paragraphs above.
+
 ## Explanation log schema
 
 Each entry is exactly five fields. Keep them tight — one to four sentences each.
@@ -107,6 +116,7 @@ Each entry is exactly five fields. Keep them tight — one to four sentences eac
 ```
 ### <short title>
 
+- **Title rules.** When the change has a Solidity counterpart (most state-model / security / idiom entries), frame the title as `Solidity-side → Solana-side` — e.g. `mapping(address => uint256) ledger → per-supporter PDA`, not `Vec<Contribution> → per-supporter PDA`. A Solidity-fluent reader looks at the page and has never seen the naive Rust port; titles that name naive-port Rust types (`Vec<X>`, `iter_mut().find(...)`, etc.) read as gibberish to them. When the change is Solana-only hygiene (no Solidity counterpart — bump caching, PDA seed consolidation, account-size optimizations), use a plain descriptive title without the arrow.
 - **What:** the concrete change as a diff between the naive port and the optimized port. Reference the diff section or `file:line` in the .rs files. This is the LOW-LEVEL diff view; cite specific identifiers, function names, line numbers. Written for someone reviewing the diff side-by-side.
 - **Annotation:** a self-contained explanation of THIS code (the optimized version) for a Solidity-fluent reader who is looking only at the optimized file and has never seen the naive port. State what the optimized code does at this point, why a Solidity developer's mental model has to shift here, and — when meaningful — what a naive translation would have done and why this shape is preferable. Do NOT cite the naive port by filename or reference any line outside the optimized file. Two to four sentences.
 - **Why:** the platform-level reasoning, structured as a two-sided contrast for a Solidity-fluent reader. Lead the first sentence(s) with **"On Ethereum, ..."** and describe the EVM/Solidity paradigm the developer is bringing with them. Then lead the next sentence(s) with **"On Solana, ..."** and describe the paradigm that diverges. Keep it HIGH-LEVEL — platform mechanics, mental model, what serializes / what doesn't, who owns what, what the runtime guarantees. Save the per-line / per-symbol detail for `What:` and `Annotation:`. Avoid backtick code fragments here unless absolutely necessary.
