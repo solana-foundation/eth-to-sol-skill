@@ -228,7 +228,7 @@ pub contributor: Account<'info, Contributor>,
 
 ## Frontend integration
 
-No client-side change is needed for the new examples app, but consumers of the program should know:
+No client-side change is needed beyond the canonical `tokens/token-fundraiser` shape from solana-developers/program-examples, but consumers of the program should know:
 
 - The `Contributor` PDA address is deterministic: `[b"contributor", fundraiserPda, supporter.publicKey]`. Refund flows derive it client-side and pass it in.
 - `refund()` will close the supporter's contributor PDA. If the client UI relies on the account existing after refund (e.g., to show "you refunded X"), read it once, then refund — don't fetch it post-refund.
