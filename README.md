@@ -31,8 +31,8 @@ For the reference example, the inputs and outputs are pre-built under `examples/
 eth-to-sol/
 ├── README.md                   # this file
 ├── SKILL.md                    # router — loaded on every invocation; lean
-├── DECISIONS.md                # design decisions made during construction
 ├── translation/                # mechanical Solidity → Anchor mapping
+│   ├── mental-model.md
 │   ├── type-mapping.md
 │   ├── pattern-mapping.md
 │   └── stdlib-mapping.md
@@ -41,6 +41,7 @@ eth-to-sol/
 │   ├── pdas.md
 │   ├── parallelism.md
 │   ├── compute-budget.md
+│   ├── transactions-and-commitment.md
 │   ├── rent-and-size.md
 │   └── program-splitting.md
 ├── security/                   # non-negotiable hardening rules
@@ -71,13 +72,18 @@ The skill is designed so adding examples is mechanical:
 
 Three reference examples ship with the skill (token-fundraiser, escrow, erc4626-vault) covering the most common ERC-20-adjacent translation surface. New examples should not require sub-file changes — if they do, the gap is in the guidance, not the example.
 
+## Source alignment
+
+The skill tracks Solana Enterprise Training Module 1B, "From EVM to SVM":
+https://github.com/solana-foundation/solana-enterprise-training/tree/main/module-1b-from-evm-to-svm
+
+The skill references the module's engineering topics: the caller-brings-state mental model, account/PDA translation, SPL Token, CPI account propagation, Solana security checks, transactions, local fees, commitment, and developer tooling. It does not ship course UI, slides, quizzes, or app-specific interface material.
+
 ## Assumptions
 
 - **Anchor 1.0+** is the target framework. The reference examples compile against `anchor-lang = "1.0.2"` / `anchor-spl = "1.0.2"`. Note that 1.0 changed `CpiContext::new` / `new_with_signer` to take `Pubkey` (via `.key()`) instead of `AccountInfo` for the program argument. Raw Solana is noted only when CU-critical or when Anchor cannot express the pattern (rare).
 - **SPL Token classic** is the default for fungible tokens. Token-2022 is mentioned where its extensions change the answer.
 - **Solidity ^0.8.x** assumed for input contracts (built-in arithmetic checks). Earlier versions need extra care — see `security/arithmetic.md`.
-
-See `DECISIONS.md` for the full list.
 
 ## Style
 

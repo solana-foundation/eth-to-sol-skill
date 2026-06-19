@@ -162,15 +162,15 @@ Already covered by #16 above (the row for "user-supplied token Mint" implicitly 
 
 ---
 
-### I.3 — Frontend-section placement convention (cross-example consistency)
+### I.3 — Client/API integration notes placement convention (cross-example consistency)
 
 **Where:** `SKILL.md` output contract.
 
-**Missing today:** the output contract describes `05-explanation.md` as having one entry per change, themed. It doesn't say where (or whether) to include a frontend-integration section.
+**Status:** resolved in `SKILL.md`. The output contract now says when to add a `## Client/API integration notes` section and keeps it scoped to program API/account/transaction changes.
 
 **Proposed addition to the output contract:**
 
-> When the optimized version changes the client-side integration in a way a porting team needs to know about on day one — typically when SPL Token replaces a custom token surface, or when share/balance lookups move off the program — append a `## Frontend integration` section to `05-explanation.md` with:
+> When the optimized version changes non-program integration in a way a porting team needs to know about on day one — typically when SPL Token replaces a custom token surface, or when share/balance lookups move off the program — append a `## Client/API integration notes` section to `05-explanation.md` with:
 >
 > - Before/after code (TypeScript using `@solana/web3.js` + `@solana/spl-token`).
 > - List of changed call sites a porting team will touch.

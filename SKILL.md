@@ -1,11 +1,13 @@
 ---
 name: eth-to-sol
-description: Translate Ethereum/Solidity contracts to production-grade Solana programs in two passes (faithful port, then Solana-native refactor) and teach the developer what changed and why.
+description: Translate Ethereum/Solidity contracts and EVM mental models to production-grade Solana programs. Use for EVM-to-SVM account model, PDA, SPL Token, CPI, Solana security, transaction/fee/commitment, and Anchor migration guidance.
 ---
 
 # eth-to-sol
 
 Translate Ethereum/Solidity contracts to production-grade Solana programs. The goal is not a 1:1 port — it is Solana-native code plus a teaching artifact that makes every decision legible to a developer who knows Solidity well and Solana barely.
+
+This skill ships standalone from any app that invokes it. Keep outputs scoped to programs, accounts, transactions, and developer-facing API integration. Do not produce UI artifacts such as React components, screens, CSS, app copy, or visual design guidance.
 
 ## Two-pass protocol (hard rule)
 
@@ -28,7 +30,7 @@ For an input named `foo`, produce exactly these artifacts:
 | `04-diff.md` | Structured diff. **Group sections by theme** (State model / Parallelism / Security / CPI & program reuse / Compute & rent / Idioms) — mirror the explanation log. Each section: short header, before/after snippets, `file:line` references to the two `.rs` files. |
 | `05-explanation.md` | The explanation log. One entry per change in `04-diff.md`, grouped by theme. Schema below. |
 
-When the optimized version meaningfully changes client-side integration (typically: SPL Token replaces a custom token surface, or balance/aggregate lookups move off the program), append a `## Frontend integration` section at the bottom of `05-explanation.md` containing: before/after TypeScript using `@solana/web3.js` + `@solana/spl-token`; the list of changed call sites a porting team will touch; migration scoping. If the integration shift is minor, fold it into a relevant entry's Tradeoff instead — don't bloat the file.
+When the optimized version meaningfully changes non-program integration (typically: SPL Token replaces a custom token surface, balance/aggregate lookups move off the program, or transaction/account lists change), append a `## Client/API integration notes` section at the bottom of `05-explanation.md`. Keep it to account derivation, required accounts, ATA creation, transaction construction, SDK call shape, and migration scoping. Do not include UI components, screens, styling, or app-specific copy. If the integration shift is minor, fold it into a relevant entry's Tradeoff instead.
 
 `05-explanation.md` is the teaching surface. Treat it as a first-class deliverable, not a comment block.
 
@@ -62,8 +64,35 @@ The default loads are non-negotiable. The mental-model file frames every other d
 | Protocol takes a user-supplied token Mint as configuration (vault, AMM, lending market) | `security/reentrancy.md`, `security/account-validation.md`, `security/cpi-safety.md` |
 | Vault/AMM/4626-shaped protocol (share/asset conversion math, deposit + withdraw + redeem semantics) | `security/arithmetic.md` (rounding-direction discipline), `optimization/account-model.md` (read aggregates from SPL Token), `optimization/parallelism.md` (read-only vault pattern) |
 | Time-delta math (`now - last_update`, accumulator periods) | `security/arithmetic.md` (clock-skew + negative-delta-cast pitfall) |
+| Large account graph, payment batch, swap route, many recipients, or transaction-size concern | `optimization/transactions-and-commitment.md`, `optimization/compute-budget.md` |
+| Priority fees, local fee markets, compute limit, recent blockhash, retry/expiry, or landing strategy | `optimization/transactions-and-commitment.md`, `optimization/compute-budget.md` |
+| Settlement, irreversible off-chain action, indexer correctness, or commitment-level choice | `optimization/transactions-and-commitment.md` |
+| Client SDK/tooling/testing migration asks (`@solana/kit`, `web3.js`, Anchor client, LiteSVM, Bankrun, local validator) | `optimization/transactions-and-commitment.md` |
 
 Always load every security/* file relevant to the constructs present. Security is non-negotiable.
+
+## Module 1B source alignment
+
+This skill tracks Solana Enterprise Training Module 1B, "From EVM to SVM":
+https://github.com/solana-foundation/solana-enterprise-training/tree/main/module-1b-from-evm-to-svm
+
+Use the module as source alignment, not as shipped course UI. The skill should reference the engineering concepts below and avoid slides, quizzes, UI, or app-specific teaching surfaces.
+
+| Module 1B topic | Skill coverage |
+|---|---|
+| Purpose, prerequisites, and learning objectives | This `SKILL.md` assumes a Solidity-fluent reader with baseline Solana awareness and scopes outputs to translation artifacts, not course delivery. |
+| Mental-model shift: "you bring the state" | `translation/mental-model.md` |
+| Account model translation: storage slots, mappings, PDAs, explicit signers, upgrades, IDL/logs/time | `translation/mental-model.md`, `translation/type-mapping.md`, `translation/pattern-mapping.md`, `optimization/account-model.md`, `optimization/pdas.md` |
+| ERC-20 vs SPL Token: Mint, Token Account, ATA, allowances/delegates, decimals, token-account creation | `translation/stdlib-mapping.md`, `optimization/account-model.md`, `security/cpi-safety.md` |
+| Composability: EVM `call` vs Solana CPI and account-graph propagation | `translation/mental-model.md`, `security/cpi-safety.md`, `optimization/program-splitting.md` |
+| Reentrancy as a structural property and the replacement failure modes | `security/reentrancy.md`, `security/cpi-safety.md`, `security/account-validation.md` |
+| Solana program security checklist: ownership, signer checks, substitution, discriminators, arithmetic, CPI authority, safe close, rent | `security/account-validation.md`, `security/signer-checks.md`, `security/pda-canonicalization.md`, `security/arithmetic.md`, `security/cpi-safety.md`, `optimization/rent-and-size.md` |
+| Transactions in practice: recent blockhash, expiry, versioned transactions, ALTs, compute budget, priority fees, local fee markets | `optimization/transactions-and-commitment.md`, `optimization/compute-budget.md`, `optimization/parallelism.md` |
+| Commitment levels for settlement and indexing | `optimization/transactions-and-commitment.md` |
+| Developer workflow: `@solana/kit`, legacy `web3.js`, Anchor client, LiteSVM, Bankrun, local validator | `optimization/transactions-and-commitment.md` |
+| Cumulative EVM/SVM reference | `translation/mental-model.md` plus the referenced translation, optimization, and security files |
+| Quiz and slides | Do not ship; those are course surfaces, not skill runtime material. |
+| Additional resources | Keep external: Solana Cookbook, Anchor Book, Neodyme Common Pitfalls, Sec3 audit checklist, Solana Program Examples, Helius priority-fee guide, and official Solana fee docs. |
 
 ## Pre-flight checklist (gate on the optimized version)
 
@@ -71,7 +100,7 @@ Every item must hold before emitting `03-optimized.rs`. If one fails, fix and re
 
 - [ ] Every arithmetic op is `checked_*` — or has an inline justification for `saturating_*` / `wrapping_*`. No bare `+ - * /` on user-controlled values.
 - [ ] Every `Account<'info, T>` either uses Anchor's typed checks or includes explicit owner + discriminator validation. No `AccountInfo` smuggled through without checks.
-- [ ] Every signer-required path uses `Signer<'info>` or a manual `is_signer` check. No "the front end won't call it without a signer" reasoning.
+- [ ] Every signer-required path uses `Signer<'info>` or a manual `is_signer` check. No "the client won't call it without a signer" reasoning.
 - [ ] Every PDA derivation either uses `seeds = [...], bump = stored_bump` (preferred — saves ~1.5k CU per call) or bare `seeds = [...], bump,` (acceptable when CU is not pressured; both forms enforce canonicalization via Anchor's `find_program_address` check). The cached form is strongly preferred — all reference examples use it. Do **not** use `bump = <user_input>` — that's the actual canonicalization vulnerability.
 - [ ] CPIs use `CpiContext::new` or `CpiContext::new_with_signer`. The program arg is a `Pubkey` (use `ctx.accounts.<program>.key()`) — Anchor 1.0+ removed the `AccountInfo` form. No hand-rolled `invoke`/`invoke_signed` with manually assembled `AccountInfo` arrays unless raw Solana is justified.
 - [ ] No path mutates state after a CPI to an untrusted program without re-reading and re-validating. (See `security/reentrancy.md` for why account locking is necessary but not sufficient.)
@@ -191,4 +220,4 @@ Trace the protocol on `examples/token-fundraiser/` end-to-end before producing t
 
 ## Ambiguities
 
-See `DECISIONS.md` at the skill root for choices made during construction (Anchor version, SPL Token classic vs Token-2022, etc.). When in doubt on a new translation, prefer the choice consistent with the reference example unless the input forces otherwise.
+When in doubt on a new translation, prefer the choice consistent with the reference examples unless the input forces otherwise. Anchor 1.0+ is the target, classic SPL Token is the default for ordinary fungible tokens, and Token-2022 is used only when the source semantics require an extension.

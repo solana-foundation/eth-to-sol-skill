@@ -2,6 +2,8 @@
 
 Solana meters execution in **compute units (CU)**. Every instruction has a budget; exceeding it aborts. This is the analog of EVM gas, but unlike gas it is not directly paid in SOL — the budget is a runtime constraint, with a separate **priority fee** mechanism for ordering.
 
+For transaction-level mechanics — recent blockhash expiry, versioned transactions, Address Lookup Tables, local fee markets, retry strategy, and commitment levels — load `optimization/transactions-and-commitment.md`.
+
 ## The numbers
 
 - **Default per-instruction budget:** 200,000 CU.
@@ -56,7 +58,13 @@ The runtime caps at 1.4M total per transaction. Set the limit only as high as yo
 
 ## Priority fees
 
-Priority fees are paid in micro-lamports per CU and tip the validator to include your transaction sooner. They are not the gas cost — they are an ordering bid. Set them based on network conditions, not as a function of how much your instruction does.
+Priority fees are paid in micro-lamports per CU and tip the validator to include your transaction sooner. They are not the gas cost; they are an ordering bid:
+
+```text
+priority_fee = requested_compute_unit_limit * compute_unit_price
+```
+
+Set them against the transaction's actual writable account set, not generic network busyness. Congestion is usually local to hot writable accounts, so a payment transaction touching cold accounts should not blindly inherit the fee implied by unrelated DEX activity. Keep the CU limit tight because the fee scales with the limit requested, not the compute consumed.
 
 ## When raw Solana beats Anchor on CU
 

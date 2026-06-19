@@ -289,11 +289,11 @@ Three entries sampled randomly (by line position: ~1/4, ~1/2, ~3/4 of the file):
 
 ---
 
-## G. Frontend integration honesty
+## G. Client/API integration notes honesty
 
 **Tag: PASS**
 
-`05-explanation.md` has a dedicated "Frontend integration" section (last major section, ~50 lines). Includes:
+`05-explanation.md` has a dedicated "Client/API integration notes" section (last major section, ~50 lines). Includes:
 
 - **Before/After code snippets** in TypeScript using `@solana/spl-token` + `@solana/web3.js`. Concrete instruction shape, ATA derivation, idempotent ATA creation.
 - **Five enumerated changes** for the porting team: no upfront approve, reads via SPL Token, ATA derivation, delegate model, event indexing.
@@ -356,7 +356,7 @@ The role is identical across all three: a singleton-per-protocol-instance PDA ho
 
 Per-entity enum names are fine (idiomatic for distinguishing errors in client code). Variant names `Overflow`, `ZeroAmount`, `InsufficientBalance`, etc. are consistent.
 
-### I.3 — Frontend integration section placement
+### I.3 — Client/API integration notes section placement
 
 | Example | Where |
 |---|---|
@@ -364,13 +364,9 @@ Per-entity enum names are fine (idiomatic for distinguishing errors in client co
 | escrow | Standalone top-level section after §Idioms |
 | erc4626-vault | Standalone top-level section after §Idioms |
 
-**This is a real inconsistency.** Two of three examples cover frontend integration with concrete before/after; staking-vault doesn't (likely because the staking-vault's client integration is simpler — the user just calls `stake`/`withdraw` with their ATAs as args, no fundamental shift like share-token integration). But the placement convention varies.
+**This is a real inconsistency.** Two of three examples cover client/API integration with concrete before/after; staking-vault doesn't (likely because the staking-vault's client integration is simpler — the user just calls `stake`/`withdraw` with their ATAs as args, no fundamental shift like share-token integration). But the placement convention varies.
 
-**Proposed fix in skill revision:** standardize. Either:
-- Always a dedicated `## Frontend integration` section at the bottom of `05-explanation.md` (when applicable), or
-- Always inside a relevant tradeoff entry (with a clearly named header).
-
-I'll propose the dedicated section in the skill revision, with a decision-tree rule on when to include it.
+**Resolved in skill revision:** use a dedicated `## Client/API integration notes` section at the bottom of `05-explanation.md` when the integration shift is material. Minor integration shifts stay inside the relevant Tradeoff field.
 
 ### I.4 — Explanation log section headers
 
@@ -430,9 +426,9 @@ The ACCEPT items below get addressed in the skill revision section.
 | D. Security pre-flight | PASS (1 WEAK) | Arithmetic, account validation, CPI all clean. D.3 finds `asset_reserve` PDA uses bare `bump,` at 3 sites — security-equivalent but doesn't match strict checklist wording. Proposed fix below. |
 | E. 4626 risks | PASS | Inflation defense preserved + numeric demonstration; rounding direction correct at all 5 sites; Token-2022 rejected at type level + documented. |
 | F. Explanation log quality | PASS | 3 random entries pass What/Why/Tradeoff/tautology checks. |
-| G. Frontend integration honesty | PASS | Dedicated section with before/after code and migration sizing. |
+| G. Client/API integration notes honesty | PASS | Dedicated section with before/after code and migration sizing. |
 | H. Dogfood | PASS | Two cold-context divergence risks identified → flagged in SKILL_GAPS (#12, #14). |
-| I. Cross-example consistency | WEAK | Frontend-section placement varies (#I.3); minor stylistic naming drift. Frontend convention → skill edit. |
+| I. Cross-example consistency | WEAK | Minor stylistic naming drift remains; Client/API notes convention was moved into `SKILL.md`. |
 | J. SKILL_GAPS triage | done | 14 ACCEPT, 4 DEFER, 0 REJECT. |
 
 ### Required example-level fix

@@ -118,7 +118,7 @@ Used by `examples/token-fundraiser` (the `Fundraiser` PDA is the vault TokenAcco
 
 - **Translating `msg.sender == owner` as a `require_keys_eq` without a `Signer`**: EVM has implicit signer; Anchor needs explicit. Always pair the key check with a signer requirement.
 - **Forgetting `mut` on the signer when they pay rent**: `init` constraints require `payer = signer` where `signer` is `Signer<'info>` *and* `mut` (because lamports leave their account).
-- **Trusting an `AccountInfo` because "the front end will set it right"**: never. All inputs are adversarial.
+- **Trusting an `AccountInfo` because "the client will set it right"**: never. All inputs are adversarial.
 - **Using `Signer<'info>` on a PDA**: PDAs are not signers from the runtime's view in the outer transaction. Pass them as `AccountInfo` or `UncheckedAccount` with `/// CHECK:` notes, and sign them via CPI when the program needs to act through them.
 
 ## Multisig and threshold signers

@@ -90,7 +90,7 @@ The optimization is not to remove the contention but to bound it:
 
 The skill's job is to express the constraint truthfully, not paper over it with per-user PDAs that don't actually unlock anything because every call still has to touch the accumulator account.
 
-Cross-reference: `examples/staking-vault/03-optimized.rs` is the worked instance; `04-diff.md §P2` and `05-explanation.md §"HONEST LIMIT"` discuss the ceiling.
+If you add a Synthetix-style staking or emissions example, include this contention ceiling explicitly in `04-diff.md` and `05-explanation.md`. Do not imply that per-user PDAs remove a global accumulator write lock.
 
 ## When the governance PDA can be read-only
 

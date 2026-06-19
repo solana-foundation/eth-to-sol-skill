@@ -44,9 +44,9 @@ After first use, each term is fair game.
 ### Move share ERC-20 surface to SPL Token (diff §S3)
 
 - **What:** Share transfer/approve are not vault instructions — clients call SPL Token directly with the share mint. The vault exposes only the 4626 operations (deposit, mint, withdraw, redeem) plus governance.
-- **Why:** Same lesson as the ERC-20 example, applied to the share token. Reimplementing transfer/approve inside the vault would duplicate the SPL Token program — auditable code, audited primitives, a bigger surface for bugs, and no integration benefit. See **Frontend integration** below for the concrete client-side delta.
+- **Why:** Same lesson as the ERC-20 example, applied to the share token. Reimplementing transfer/approve inside the vault would duplicate the SPL Token program — auditable code, audited primitives, a bigger surface for bugs, and no integration benefit. See **Client/API integration notes** below for the concrete client-side delta.
 - **Benefit:** Vault code shrinks. The share token plugs into every Solana wallet, explorer, and indexer for free.
-- **Tradeoff:** Clients have to know that "the share token" is an SPL Token with a known mint address; they read balances through SPL Token, not through the vault. Documented in the Frontend integration section.
+- **Tradeoff:** Clients have to know that "the share token" is an SPL Token with a known mint address; they read balances through SPL Token, not through the vault. Documented in the Client/API integration notes section.
 
 ---
 
@@ -127,7 +127,7 @@ After first use, each term is fair game.
 
   Without the offset, the honest user would receive zero shares for their 10^6 assets — full loss.
 - **Benefit:** The standard 4626 attack class is mitigated. Translation is mechanical because the defense is preserved as-is from OpenZeppelin's Solidity; the optimized version's checked arithmetic ensures a future code change can't silently weaken it.
-- **Tradeoff:** Share decimals = asset decimals + 6, which means the share token has 6 more decimal places than the underlying. The frontend should display whole shares (`amount / 10^share_decimals`) rather than raw `amount`. Standard Solana token UX. **Regression-test idea:** at `total_supply = 0, total_assets = 0`, depositing 1 asset must yield ≥ `10^6` shares. If a future code change makes the first depositor get 1 share or fewer, the defense is broken — assert `convert_to_shares(1, 0, 0, Rounding::Down) >= 1_000_000` in unit tests.
+- **Tradeoff:** Share decimals = asset decimals + 6, which means the share token has 6 more decimal places than the underlying. Clients should convert raw share amounts to human units (`amount / 10^share_decimals`) rather than expose raw `amount`. Standard Solana token accounting. **Regression-test idea:** at `total_supply = 0, total_assets = 0`, depositing 1 asset must yield >= `10^6` shares. If a future code change makes the first depositor get 1 share or fewer, the defense is broken — assert `convert_to_shares(1, 0, 0, Rounding::Down) >= 1_000_000` in unit tests.
 
 ### `has_one` cross-validation (diff §Sec7)
 
@@ -204,13 +204,13 @@ After first use, each term is fair game.
 ### Typed errors (diff §I4)
 
 - **What:** Nine `VaultError` variants, named per failure mode.
-- **Why:** Every failure mode has a name and a stable code in the program's IDL. Off-chain consumers (frontends, indexers) can match on error codes and surface human-readable messages without parsing log text.
+- **Why:** Every failure mode has a name and a stable code in the program's IDL. Off-chain consumers (clients, indexers) can match on error codes and surface human-readable messages without parsing log text.
 - **Benefit:** Real diagnostics, not `msg!()` strings buried in transaction logs.
 - **Tradeoff:** None.
 
 ---
 
-## Frontend integration
+## Client/API integration notes
 
 This is the section a porting team should read first.
 
@@ -327,4 +327,4 @@ await program.methods.withdraw(assetsAmount).accounts({
 - **Delegate (transferFrom-equivalent) is one `approve` on the share ATA**, not a per-`(owner, spender)` allowance map. If your dApp expected multi-spender support, see the §C2 tradeoff.
 - **Event indexing changes.** SPL Token emits its own logs for share movement (mint/burn). The vault emits `DepositEvent` / `WithdrawEvent` / `EarnEvent` via Anchor's `#[event]` macro — parse via the Anchor IDL.
 
-If your existing 4626 dApp's frontend assumes one contract call per operation, budget a sprint for the migration — the architecture is straightforward, but every call site touches.
+If your existing 4626 dApp's client assumes one contract call per operation, budget a sprint for the migration; the architecture is straightforward but every call site touches.
